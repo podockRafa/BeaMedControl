@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    
+    <link rel="icon" type="image/png" href="/icon-web.png" />
+    
+    <meta name="theme-color" content="#ffffff">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <title>BeaMedControl</title>
+    
+    <meta name="description" content="Sistema completo de gestão para enfermeiros e cuidadores. Controle medicamentos, estoque, horários e crie prontuários digitais com o BeaMedControl.">
+    
+    <meta name="keywords" content="enfermagem, controle de medicamentos, cuidador de idosos, prontuário digital, gestão de saúde, app enfermagem, estoque de remédios">
+    
+    <meta name="author" content="Rafael Brandão">
+    
+    <meta name="robots" content="index, follow"> 
+
+    <meta name="google-site-verification" content="bZv_B1Vbdv1s258tJwK4OJrqc6I4GGqu14zumUp-f1A" />
+    
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('SW registrado!', reg))
+            .catch(err => console.log('Erro no SW:', err));
+        });
+      }
+    </script>
+  </body>
+</html>
