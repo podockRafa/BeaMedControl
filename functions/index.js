@@ -1,6 +1,6 @@
 /**
- * ARQUIVO MESTRE: ROBÔ + PAGAMENTOS (ASAAS)
- * Versão Final: Híbrida, Segura e com Relatório de Erros Detalhado
+ * ARQUIVO MESTRE: ROBÔ (CRON) + PAGAMENTOS (ASAAS)
+ * Versão Final: Corrigida e Otimizada
  */
 
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -8,7 +8,6 @@ const { onRequest } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const axios = require("axios");
-// 👇 O CORS É OBRIGATÓRIO PARA USAR AXIOS NO FRONTEND
 const cors = require("cors")({ origin: true });
 
 admin.initializeApp();
@@ -17,450 +16,305 @@ const db = admin.firestore();
 // ==================================================================
 // ⚙️ CONFIGURAÇÕES DO ASAAS
 // ==================================================================
-
 const ASAAS_URL = process.env.ASAAS_URL; 
-// SUA CHAVE API (Sandbox)
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY; 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET; 
 
 
 // ==================================================================
-// 🤖 PARTE 1: O ROBÔ AUTOMÁTICO (Scheduler) - AJUSTADO PARA BRASIL 🇧🇷
+// 🤖 PARTE 1: ROBÔ BEA (Versão Blindada Anti-NaN e Fuso BR) 🇧🇷
 // ==================================================================
 
-exports.roboMedicacao = onSchedule("every 60 minutes", async (event) => {
-    // 1. Pega a hora certa no Brasil, não importa onde o servidor esteja
-    const agora = getHoraBrasilia();
+exports.verificarEstoque = onSchedule({
+    schedule: "0 * * * *", // Hora cheia
+    timeZone: "America/Sao_Paulo",
+    timeoutSeconds: 60,
+}, async (event) => {
     
-    logger.info(`🤖 Robô iniciado (Hora Brasil: ${agora.toLocaleString()})...`);
+    const agora = new Date();
+    logger.info(`🤖 Robô Bea iniciada: ${agora.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`);
 
-    const snapshot = await db.collection("medicamentos").get();
+    try {
+        const snapshot = await db.collection("medicamentos").get();
+        if (snapshot.empty) return;
 
-    if (snapshot.empty) {
-        logger.info("Nenhum medicamento encontrado.");
-        return;
-    }
+        const mapPacientes = {};
 
-    const updates = [];
-
-    snapshot.forEach((doc) => {
-        const med = doc.data();
-        const medId = doc.id;
-
-        // Verifica dia usando a hora Brasil
-        if (!ehDiaDeTomar(med, agora)) return;
-
-        // Calcula doses usando a hora Brasil
-        const dosesPendentes = calcularDosesPendentes(med, agora);
-
-        if (dosesPendentes > 0) {
-            logger.info(`💊 Descontando ${dosesPendentes} doses de: ${med.nome}`);
-            updates.push(processarDesconto(doc.ref, med, medId, dosesPendentes, agora));
-        }
-    });
-
-    await Promise.all(updates);
-    logger.info("✅ Ciclo do robô finalizado.");
-});
-
-
-
-
-// ==================================================================
-// 🧠 FUNÇÕES AUXILIARES (ATUALIZADAS PARA FUSO HORÁRIO)
-// ==================================================================
-
-// 👇 NOVA FUNÇÃO MÁGICA PARA CORRIGIR O FUSO
-function getHoraBrasilia() {
-    // Cria uma data baseada no servidor
-    const dataServidor = new Date();
-    // Converte para string no fuso de SP
-    const stringBrasil = dataServidor.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
-    // Cria um novo objeto Date com a hora certa do Brasil
-    return new Date(stringBrasil);
-}
-
-function ehDiaDeTomar(med, dataAtual) {
-    if (!med.dataInicioTratamento) return true;
-    
-    // Ajusta o início do tratamento para considerar apenas a data (00:00)
-    const dataInicio = new Date(med.dataInicioTratamento + "T00:00:00");
-    
-    // Zera as horas para comparar apenas dias
-    const diaAtualZero = new Date(dataAtual);
-    diaAtualZero.setHours(0, 0, 0, 0);
-    
-    const diffTime = Math.abs(diaAtualZero - dataInicio);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (med.frequenciaTipo === 'diario') return true;
-    
-    if (med.frequenciaTipo === 'intervalo') {
-        const intervalo = med.frequenciaIntervalo || 2;
-        return (diffDays % intervalo) === 0;
-    }
-    
-    if (med.frequenciaTipo === 'dias_semana') {
-        const diaHoje = dataAtual.getDay(); 
-        return med.frequenciaDias && med.frequenciaDias.includes(diaHoje);
-    }
-    return true;
-}
-
-function calcularDosesPendentes(med, agora) {
-    // Se nunca foi checado, não desconta retroativo loucamente, 
-    // assume que a ultima checagem foi "agora" para começar a contar daqui pra frente
-    // OU se quiser ser rigoroso, precisaria de uma logica de "created_at"
-    if (!med.ultimaChecagem) return 0; 
-
-    // A ultima checagem já deve estar salva como ISOString. 
-    // Precisamos converter ela para objeto Date para comparar.
-    const ultimaChecagem = new Date(med.ultimaChecagem);
-    let contador = 0;
-
-    med.horarios.forEach(horarioStr => {
-        const [hora, minuto] = horarioStr.split(':').map(Number);
-        
-        // Cria o horário do remédio HOJE usando a data BRASIL
-        const dataHorarioHoje = new Date(agora);
-        dataHorarioHoje.setHours(hora, minuto, 0, 0);
-
-        // A MÁGICA:
-        // Se o horário do remédio (ex: 15:00) é DEPOIS da última vez que o robô passou
-        // E é ANTES ou IGUAL a hora de agora (ex: 15:05)
-        // Então tem que tomar!
-        if (dataHorarioHoje > ultimaChecagem && dataHorarioHoje <= agora) {
-            contador++;
-        }
-    });
-    return contador;
-}
-
-// ... (MANTENHA A processarDesconto IGUAL) ...
-async function processarDesconto(docRef, med, medId, qtdDoses, agora) {
-    const dosePorTomada = Number(med.dose || 1);
-    const doseTotalNecessaria = qtdDoses * dosePorTomada;
-    
-    // 1. Calcula o Estoque TOTAL Real (O que está na cartela + O que está nas caixas fechadas)
-    const estoqueTotalFisico = Number(med.caixaAtivaRestante) + (Number(med.estoqueCaixas) * Number(med.capacidadeCaixa));
-
-    // 🚨 CENÁRIO DE FALTA: O paciente precisa tomar, mas não tem remédio físico
-    if (estoqueTotalFisico < doseTotalNecessaria) {
-        
-        logger.warn(`🚫 FALTA DE ESTOQUE para ${med.nome}. Necessário: ${doseTotalNecessaria}, Disponível: ${estoqueTotalFisico}`);
-
-        // A. Registra o "Crime" no histórico (Bem explicadinho)
-        await db.collection("historico_medicamentos").add({
-            data: agora.toISOString(),
-            pacienteId: med.pacienteId,
-            medicamentoId: medId,
-            medicamentoNome: med.nome,
-            acao: "FALTA_ESTOQUE", // 👈 Novo código de erro
-            detalhe: `PACIENTE NÃO TOMOU! Dose de ${doseTotalNecessaria} un não realizada por falta de estoque.`,
-            usuario: "Sistema Automático"
+        // 1. Agrupa por Paciente
+        snapshot.forEach(doc => {
+            const med = doc.data();
+            if (med.status === 'pausado' || !med.horarios) return;
+            
+            if (!mapPacientes[med.pacienteId]) {
+                mapPacientes[med.pacienteId] = [];
+            }
+            mapPacientes[med.pacienteId].push({ id: doc.id, ref: doc.ref, data: med });
         });
 
-        // B. Atualiza SÓ a hora (para o robô não ficar tentando descontar isso para sempre e travar)
-        // O estoque permanece zerado (ou baixo), não fica negativo.
+        // 2. Processa cada Paciente
+        const promisesPacientes = Object.keys(mapPacientes).map(async (pacienteId) => {
+            const listaMeds = mapPacientes[pacienteId];
+            let relatorioFinal = []; 
+            let houveAcao = false;
+
+            for (const item of listaMeds) {
+                const med = item.data;
+                // Garante datas válidas
+                let ultimaChecagem = med.ultimaChecagem ? new Date(med.ultimaChecagem) : new Date(med.criadoEm.toDate());
+
+                // Filtra horários (Com Fuso Horário Corrigido)
+                const horariosParaDescontar = med.horarios.filter(h => {
+                    const hojeBR = agora.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+                    const dataString = `${hojeBR}T${h}:00-03:00`;
+                    const dataHorarioHoje = new Date(dataString);
+
+                    if (isNaN(dataHorarioHoje.getTime())) return false;
+                    return dataHorarioHoje <= agora && dataHorarioHoje > ultimaChecagem;
+                });
+
+                if (horariosParaDescontar.length > 0) {
+                    // 👇 CHAMA A FUNÇÃO MATEMÁTICA BLINDADA
+                    const resultado = await processarDescontoBlindado(item.ref, med, item.id, horariosParaDescontar, agora);
+                    if (resultado) {
+                        relatorioFinal.push(resultado);
+                        houveAcao = true;
+                    }
+                }
+            }
+
+            // 3. Salva o Card Agrupado (Aqui que estava o erro do nome!)
+            if (houveAcao && relatorioFinal.length > 0) {
+                const textoDetalhe = relatorioFinal.join("\n");
+
+                await db.collection("historico_medicamentos").add({
+                    data: agora.toISOString(),
+                    pacienteId: pacienteId,
+                    medicamentoId: "AGRUPADO", 
+                    medicamentoNome: "💊 Visita do Robô Bea", // O NOME CERTO
+                    acao: "ROBO_CONSUMO",
+                    detalhe: textoDetalhe,
+                    usuario: "🤖 Robô Bea"
+                });
+            }
+        });
+
+        await Promise.all(promisesPacientes);
+        logger.info("✅ Ciclo do Robô Bea finalizado.");
+
+    } catch (error) {
+        logger.error("❌ Erro no robô:", error);
+    }
+});
+
+// 👇 Substitua a função auxiliar lá no final do arquivo functions/index.js
+
+async function processarDescontoBlindado(docRef, med, medId, horariosVencidos, agora) {
+    // 🛡️ 1. CONVERSÃO SEGURA (BLINDAGEM)
+    const dose = Number(med.dose || 1);
+    const estoqueCaixas = Number(med.estoqueCaixas || 0);
+    const caixaAtiva = Number(med.caixaAtivaRestante || 0);
+    const capacidade = Number(med.capacidadeCaixa || 30);
+    
+    // Calcula quantos comprimidos o robô precisa baixar AGORA
+    const qtdNecessaria = horariosVencidos.length * dose;
+
+    // Calcula quantos comprimidos existem NO TOTAL (Somando caixa aberta + caixas fechadas)
+    const totalDisponivel = caixaAtiva + (estoqueCaixas * capacidade);
+
+    // 🛑 2. VERIFICAÇÃO DE ESTOQUE ZERO (A MUDANÇA ESTÁ AQUI)
+    if (totalDisponivel < qtdNecessaria) {
+        // Se não tem remédio suficiente, a gente NÃO SUBTRAI nada.
+        // Apenas atualizamos a data para o robô não ficar tentando de novo daqui a 1 hora.
         await docRef.update({
             ultimaChecagem: agora.toISOString()
         });
 
-        return; // Para por aqui. Não desconta nada.
+        const horariosTexto = horariosVencidos.join(", ");
+        // Retorna a mensagem de erro para o histórico
+        return `🚫 ${med.nome}: NÃO TOMOU! Estoque insuficiente para ${qtdNecessaria} dose(s) das ${horariosTexto}.`;
     }
 
-    // ✅ CENÁRIO NORMAL (Tem estoque suficiente)
-    let novaCaixaAtiva = Number(med.caixaAtivaRestante) - doseTotalNecessaria;
-    let novoEstoque = Number(med.estoqueCaixas);
+    // ✅ 3. SE TEM ESTOQUE, SEGUE O BAIXA NORMAL
+    let novaCaixa = caixaAtiva - qtdNecessaria;
+    let novoEstoque = estoqueCaixas;
+    let alertaTrocaCaixa = false;
 
-    // Lógica de abrir novas caixas se a ativa acabar
-    while (novaCaixaAtiva <= 0) {
+    // Lógica de virar a caixa (abrir nova se a atual acabar)
+    while (novaCaixa <= 0) {
         if (novoEstoque > 0) {
-            novoEstoque--;
-            novaCaixaAtiva += Number(med.capacidadeCaixa);
+            novoEstoque--;       // Tira uma caixa do armário
+            novaCaixa += capacidade; // Enche a cartela
+            alertaTrocaCaixa = true;
         } else {
-            // Essa parte teoricamente nunca vai ser atingida agora por causa da trava acima, 
-            // mas mantemos por segurança matemática.
-            break; 
+            // Isso aqui teoricamente nunca vai acontecer por causa do IF lá em cima,
+            // mas deixamos como segurança.
+            novaCaixa = 0; 
+            break;
         }
     }
 
-    // Atualiza o banco com os novos valores
+    // Atualiza no Banco
     await docRef.update({
-        caixaAtivaRestante: novaCaixaAtiva,
-        estoqueCaixas: novoEstoque,
+        caixaAtivaRestante: Number(novaCaixa),
+        estoqueCaixas: Number(novoEstoque),
         ultimaChecagem: agora.toISOString()
     });
 
-    await db.collection("historico_medicamentos").add({
-        data: agora.toISOString(),
-        pacienteId: med.pacienteId,
-        medicamentoId: medId,
-        medicamentoNome: med.nome,
-        acao: "ROBO_CONSUMO",
-        detalhe: `Robô descontou ${doseTotalNecessaria} dose(s) automaticamente.`,
-        usuario: "Sistema Automático"
-    });
+    // Retorna a frase de sucesso
+    const horariosTexto = horariosVencidos.join(", ");
+    let msgExtra = alertaTrocaCaixa ? " (Abriu nova caixa 📦)" : "";
+    
+    return `✅ ${med.nome}: Baixou ${qtdNecessaria} comp. (Horários: ${horariosTexto}). Restam: ${novaCaixa} na caixa.${msgExtra}`;
 }
 
-
 // ==================================================================
-// 💳 PARTE 2: CRIAR PAGAMENTO (HÍBRIDO & SEGURO 🔒)
+// 💳 PARTE 2: CRIAR PAGAMENTO
 // ==================================================================
 
 exports.criarPagamento = onRequest((req, res) => {
   cors(req, res, async () => {
     try {
-      if (req.method !== "POST") {
-        return res.status(405).send({ error: "Método não permitido" });
-      }
+      if (req.method !== "POST") return res.status(405).send({ error: "Método não permitido" });
 
-      // --- 🔒 CAMADA DE SEGURANÇA (TOKEN) ---
+      // --- 🔒 SEGURANÇA (TOKEN) ---
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-         logger.warn("Tentativa de acesso sem token.");
-         return res.status(401).send({ error: "Não autorizado. Faça login novamente." });
+          return res.status(401).send({ error: "Não autorizado." });
       }
-
       const idToken = authHeader.split('Bearer ')[1];
-      let decodedToken;
-
-      try {
-         decodedToken = await admin.auth().verifyIdToken(idToken);
-      } catch (error) {
-         logger.warn("Token inválido ou expirado.");
-         return res.status(403).send({ error: "Sessão inválida." });
-      }
-
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
       const userId = decodedToken.uid; 
-      // ------------------------------------------------
+      // ----------------------------
 
       const { email, nome, cpfCnpj, billingType, cardData } = req.body;
 
-      if (!email) {
-        return res.status(400).send({ error: "Email obrigatório." });
-      }
+      if (!email) return res.status(400).send({ error: "Email obrigatório." });
+      if (billingType === 'CREDIT_CARD' && !cardData) return res.status(400).send({ error: "Dados do cartão obrigatórios." });
 
-      if (billingType === 'CREDIT_CARD' && !cardData) {
-         return res.status(400).send({ error: "Dados do cartão são obrigatórios." });
-      }
-
-      // A. Procura ou Cria o Cliente no Asaas
+      // A. Cliente Asaas
       let customerId;
       try {
-          const buscaCliente = await axios.get(`${ASAAS_URL}/customers?email=${email}`, {
-            headers: { access_token: ASAAS_API_KEY }
-          });
-
-          if (buscaCliente.data.data.length > 0) {
-            customerId = buscaCliente.data.data[0].id;
-            await axios.post(`${ASAAS_URL}/customers/${customerId}`, {
-                cpfCnpj: cpfCnpj,
-                name: nome
-            }, { headers: { access_token: ASAAS_API_KEY } });
+          const busca = await axios.get(`${ASAAS_URL}/customers?email=${email}`, { headers: { access_token: ASAAS_API_KEY } });
+          if (busca.data.data.length > 0) {
+            customerId = busca.data.data[0].id;
+            await axios.post(`${ASAAS_URL}/customers/${customerId}`, { cpfCnpj, name: nome }, { headers: { access_token: ASAAS_API_KEY } });
           } else {
-            const novoCliente = await axios.post(`${ASAAS_URL}/customers`, {
-              name: nome,
-              email: email,
-              cpfCnpj: cpfCnpj || "",
-              externalReference: userId,
-              notificationDisabled: false,
-            }, { headers: { access_token: ASAAS_API_KEY } });
-            customerId = novoCliente.data.id;
+            const novo = await axios.post(`${ASAAS_URL}/customers`, { name: nome, email, cpfCnpj, externalReference: userId }, { headers: { access_token: ASAAS_API_KEY } });
+            customerId = novo.data.id;
           }
-      } catch (errCliente) {
-          throw new Error(`Erro ao criar cliente: ${errCliente.response?.data?.errors?.[0]?.description || errCliente.message}`);
-      }
+      } catch (err) { throw new Error(`Erro cliente: ${err.message}`); }
 
-      await db.collection("users").doc(userId).update({
-        asaasCustomerId: customerId
-      }, { merge: true });
+      await db.collection("users").doc(userId).update({ asaasCustomerId: customerId }, { merge: true });
 
-      // C. Monta a Cobrança
+      // B. Cobrança
       const hoje = new Date().toISOString().split('T')[0];
-      
-      const payloadCobranca = {
+      const payload = {
         customer: customerId,
         billingType: billingType || "PIX",
         dueDate: hoje,
-        value: 19.90, // Valor ajustado
+        value: 19.90,
         description: "Assinatura Mensal - BeamedControl",
         externalReference: userId,
       };
 
       if (billingType === 'CREDIT_CARD') {
-        payloadCobranca.creditCard = {
+        payload.creditCard = {
             holderName: cardData.holderName,
             number: cardData.number,
             expiryMonth: cardData.expiryMonth,
             expiryYear: cardData.expiryYear,
             ccv: cardData.ccv
         };
-        payloadCobranca.creditCardHolderInfo = {
-            name: nome,
-            email: email,
-            cpfCnpj: cpfCnpj,
-            postalCode: cardData.postalCode,      // CEP Real
-            addressNumber: cardData.addressNumber, // Número Real
-            phone: cardData.phone,                 // Celular Real
-            mobilePhone: cardData.phone            // Celular Real
+        payload.creditCardHolderInfo = {
+            name: nome, email, cpfCnpj,
+            postalCode: cardData.postalCode,
+            addressNumber: cardData.addressNumber,
+            phone: cardData.phone,
+            mobilePhone: cardData.phone
         }
       }
 
-      // D. Envia ao Asaas
-      const cobranca = await axios.post(`${ASAAS_URL}/payments`, payloadCobranca, {
-        headers: { access_token: ASAAS_API_KEY }
-      });
-
+      const cobranca = await axios.post(`${ASAAS_URL}/payments`, payload, { headers: { access_token: ASAAS_API_KEY } });
       const idCobranca = cobranca.data.id;
 
-      // E. Resposta
       if (billingType === 'PIX' || !billingType) {
-          const responseQrCode = await axios.get(
-            `${ASAAS_URL}/payments/${idCobranca}/pixQrCode`,
-            { headers: { access_token: ASAAS_API_KEY } }
-          );
-
-          return res.status(200).json({
-            success: true,
-            type: 'PIX',
-            paymentId: idCobranca,
-            imagem: responseQrCode.data.encodedImage, 
-            payload: responseQrCode.data.payload      
-          });
+          const qr = await axios.get(`${ASAAS_URL}/payments/${idCobranca}/pixQrCode`, { headers: { access_token: ASAAS_API_KEY } });
+          return res.status(200).json({ success: true, type: 'PIX', paymentId: idCobranca, imagem: qr.data.encodedImage, payload: qr.data.payload });
       }
 
-      if (billingType === 'CREDIT_CARD') {
-          return res.status(200).json({
-              success: true,
-              type: 'CREDIT_CARD',
-              paymentId: idCobranca,
-              status: cobranca.data.status 
-          });
-      }
+      return res.status(200).json({ success: true, type: 'CREDIT_CARD', paymentId: idCobranca, status: cobranca.data.status });
 
     } catch (error) {
-      // 🛡️ SEGURANÇA: SANITIZAÇÃO DE LOGS (Proteção de Dados)
-      const dadosSeguros = { ...req.body };
-      
-      // Censura o cartão antes de gravar no log
-      if (dadosSeguros.cardData) {
-          dadosSeguros.cardData = {
-              number: "MASCARADO **** " + (req.body.cardData?.number ? req.body.cardData.number.slice(-4) : "XXXX"),
-              ccv: "***", 
-              holderName: "MASCARADO",
-              expiryMonth: "**",
-              expiryYear: "****"
-          };
-      }
-
-      // Tenta capturar a mensagem de erro REAL do Asaas
-      let mensagemErroAsaas = "Houve um problema ao processar o pagamento.";
-      if (error.response?.data?.errors && error.response.data.errors.length > 0) {
-          mensagemErroAsaas = error.response.data.errors[0].description; // Ex: "Cartão vencido"
-      } else if (error.message) {
-          mensagemErroAsaas = error.message;
-      }
-
-      // Loga o erro técnico (seguro)
-      logger.error("Erro no pagamento:", {
-          erroTecnico: error.response?.data || error.message,
-          inputDoUsuario: dadosSeguros 
-      });
-      
-      // Devolve para o Front a mensagem amigável do Asaas
-      return res.status(500).send({ 
-        error: mensagemErroAsaas, // Agora o React vai mostrar o motivo real!
-        details: mensagemErroAsaas 
-      });
+      logger.error("Erro Pagamento:", error.response?.data || error.message);
+      return res.status(500).send({ error: error.response?.data?.errors?.[0]?.description || "Erro ao processar." });
     }
   });
 });
 
 
 // ==================================================================
-// 🔗 PARTE 3: WEBHOOK (Confirmação de Pagamento)
+// 🔗 PARTE 3: WEBHOOK
 // ==================================================================
 
 exports.webhookAsaas = onRequest(async (req, res) => {
     try {
         if (req.method !== "POST") return res.status(405).send("Method not allowed");
+        if (req.headers["asaas-access-token"] !== WEBHOOK_SECRET) return res.status(401).send("Acesso negado.");
 
-        const tokenRecebido = req.headers["asaas-access-token"];
-        if (tokenRecebido !== WEBHOOK_SECRET) {
-            logger.warn("Tentativa de acesso não autorizado ao Webhook.");
-            return res.status(401).send("Acesso negado.");
-        }
-
-        const evento = req.body.event;
-        const pagamento = req.body.payment;
+        const { event, payment } = req.body;
         
-        logger.info(`Recebi evento: ${evento}`);
-
-        if (evento === "PAYMENT_CONFIRMED" || evento === "PAYMENT_RECEIVED") {
-            const userId = pagamento.externalReference;
-
+        if (event === "PAYMENT_CONFIRMED" || event === "PAYMENT_RECEIVED") {
+            const userId = payment.externalReference;
             if (userId) {
                 await db.collection("users").doc(userId).update({
                     status: "ativo",
                     ultimoPagamento: new Date(),
-                    valorPago: pagamento.value
+                    valorPago: payment.value
                 });
-                logger.info(`✅ Usuário ${userId} ativado com sucesso!`);
+                logger.info(`✅ Usuário ${userId} ativado!`);
             }
         }
-
         return res.json({ received: true });
-
     } catch (error) {
-        logger.error("Erro no Webhook:", error);
+        logger.error("Erro Webhook:", error);
         return res.status(200).json({ received: false }); 
     }
 });
 
 
 // ==================================================================
-// 🧠 FUNÇÕES AUXILIARES (Lógica do Robô)
+// 🧠 FUNÇÕES AUXILIARES ÚNICAS (Lógica de Desconto e Estoque)
 // ==================================================================
 
-function ehDiaDeTomar(med, dataAtual) {
-    if (!med.dataInicioTratamento) return true;
-    const dataInicio = new Date(med.dataInicioTratamento + "T00:00:00");
-    const diffTime = Math.abs(dataAtual - dataInicio);
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+async function processarDesconto(docRef, med, medId, qtdHorarios, agora) {
+    const dosePorTomada = Number(med.dose || 1);
+    // TOTAL DE COMPRIMIDOS = (Quantos horários passaram) * (Quantos comprimidos por vez)
+    const totalComprimidosNecessarios = qtdHorarios * dosePorTomada;
+    
+    // 1. Estoque TOTAL Real
+    const estoqueTotalFisico = Number(med.caixaAtivaRestante) + (Number(med.estoqueCaixas) * Number(med.capacidadeCaixa));
 
-    if (med.frequenciaTipo === 'diario') return true;
-    if (med.frequenciaTipo === 'intervalo') {
-        const intervalo = med.frequenciaIntervalo || 2;
-        return (diffDays % intervalo) === 0;
+    // 🚨 FALTA DE ESTOQUE
+    if (estoqueTotalFisico < totalComprimidosNecessarios) {
+        logger.warn(`🚫 FALTA DE ESTOQUE: ${med.nome}`);
+        
+        await db.collection("historico_medicamentos").add({
+            data: agora.toISOString(),
+            pacienteId: med.pacienteId,
+            medicamentoId: medId,
+            medicamentoNome: med.nome,
+            acao: "FALTA_ESTOQUE",
+            detalhe: `PACIENTE NÃO TOMOU! Necessário ${totalComprimidosNecessarios} un, estoque insuficiente.`,
+            usuario: "Sistema Automático"
+        });
+
+        // Só atualiza a hora para não travar o robô
+        await docRef.update({ ultimaChecagem: agora.toISOString() });
+        return; 
     }
-    if (med.frequenciaTipo === 'dias_semana') {
-        const diaHoje = dataAtual.getDay(); 
-        return med.frequenciaDias && med.frequenciaDias.includes(diaHoje);
-    }
-    return true;
-}
 
-function calcularDosesPendentes(med, agora) {
-    if (!med.horarios || !med.ultimaChecagem) return 0;
-    const ultimaChecagem = new Date(med.ultimaChecagem);
-    let contador = 0;
-
-    med.horarios.forEach(horarioStr => {
-        const [hora, minuto] = horarioStr.split(':').map(Number);
-        const dataHorarioHoje = new Date(agora);
-        dataHorarioHoje.setHours(hora, minuto, 0, 0);
-
-        if (dataHorarioHoje > ultimaChecagem && dataHorarioHoje <= agora) {
-            contador++;
-        }
-    });
-    return contador;
-}
-
-async function processarDesconto(docRef, med, medId, qtdDoses, agora) {
-    const doseTotal = qtdDoses * (med.dose || 1);
-    let novaCaixaAtiva = Number(med.caixaAtivaRestante) - doseTotal;
+    // ✅ TEM ESTOQUE - DESCONTA
+    let novaCaixaAtiva = Number(med.caixaAtivaRestante) - totalComprimidosNecessarios;
     let novoEstoque = Number(med.estoqueCaixas);
 
     while (novaCaixaAtiva <= 0) {
@@ -484,7 +338,8 @@ async function processarDesconto(docRef, med, medId, qtdDoses, agora) {
         medicamentoId: medId,
         medicamentoNome: med.nome,
         acao: "ROBO_CONSUMO",
-        detalhe: `Robô descontou ${doseTotal} dose(s) automaticamente.`,
+        // 👇 MENSAGEM CORRIGIDA PARA O USUÁRIO ENTENDER
+        detalhe: `Robô baixou ${totalComprimidosNecessarios} comprimido(s) (ref. a ${qtdHorarios} horários).`,
         usuario: "Sistema Automático"
     });
 }

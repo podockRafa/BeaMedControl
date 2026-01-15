@@ -301,10 +301,10 @@ export default function Profile() {
       try {
           // 1. Envia via EmailJS (Substitua pelos seus IDs)
           await emailjs.send(
-              "service_648avfb",  // <--- Coloque aqui
-              "template_2pwgocx", // <--- Coloque aqui
-              templateParams,
-              "F0e9TKubmB55oV1EO"   // <--- Coloque aqui
+                import.meta.env.VITE_EMAILJS_SERVICE_ID,
+                import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+                templateParams,
+                import.meta.env.VITE_EMAILJS_PUBLIC_KEY
           );
 
           // 2. Opcional: Salva no Banco como histórico

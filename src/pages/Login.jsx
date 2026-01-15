@@ -3,11 +3,9 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth } from '../services/firebaseConnection';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { Mail } from 'lucide-react'; // 👈 FALTAVA ISSO AQUI!
 
-
-// --- AQUI ESTAVA FALTANDO A IMPORTAÇÃO ---
 import logoImg from '../assets/logo.png'; 
-// -----------------------------------------
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -112,6 +110,20 @@ export default function Login() {
                     Criar conta grátis
                 </Link>
             </p>
+        </div>
+
+        {/* 👇 SUA NOVA ÁREA DE SUPORTE (COM LAYOUT AJUSTADO) */}
+        <div className="mt-6 text-center">
+            <p className="text-xs text-gray-500 mb-1">
+                Problema para acessar a conta?
+            </p>
+            <a 
+                href="mailto:beamedcontrol@gmail.com" 
+                className="text-sm font-bold text-hospital-blue hover:underline flex items-center justify-center gap-1 transition-colors"
+            >
+                <Mail size={14}/>
+                beamedcontrol@gmail.com
+            </a>   
         </div>
 
       </div>

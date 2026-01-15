@@ -36,7 +36,6 @@ export default function PatientDetails() {
   const [estoqueCaixas, setEstoqueCaixas] = useState(1);
   const [dose, setDose] = useState(1);
   
-  // 👇 MUDANÇA 1: Horários agora é um Array (Lista), não texto solto
   const [horarios, setHorarios] = useState(['08:00']); 
   
   const [obsMed, setObsMed] = useState('');
@@ -73,9 +72,9 @@ export default function PatientDetails() {
     return () => unsub();
   }, [id]);
 
-  // --- FUNÇÕES DE CONTROLE DE HORÁRIO (NOVO) ---
+  // --- FUNÇÕES DE CONTROLE DE HORÁRIO ---
   function addHorario() {
-    setHorarios([...horarios, ""]); // Adiciona vazio
+    setHorarios([...horarios, ""]); 
   }
 
   function removeHorario(index) {
@@ -89,14 +88,15 @@ export default function PatientDetails() {
     setHorarios(novaLista);
   }
 
-  // --- FUNÇÃO DE BUSCAR HISTÓRICO ---
+  // --- FUNÇÃO DE BUSCAR HISTÓRICO (CORRIGIDA) ---
   async function handleOpenHistory() {
       setShowHistoryModal(true);
       setLoadingHistory(true);
       try {
+          // 👇 AQUI ESTÁ A CORREÇÃO: Traz só o histórico DO PACIENTE ATUAL
           const q = query(
               collection(db, "historico_medicamentos"), 
-              where("pacienteId", "==", id),
+              where("pacienteId", "==", id), 
               orderBy("data", "desc")
           );
           
@@ -108,7 +108,7 @@ export default function PatientDetails() {
           setHistoryList(lista);
 
       } catch (error) {
-          console.log("Erro ao buscar histórico", error);
+          console.log("Erro ao buscar histórico. Verifique se criou o índice no Firebase Console.", error);
       } finally {
           setLoadingHistory(false);
       }
@@ -204,10 +204,7 @@ export default function PatientDetails() {
     setCapacidadeCaixa(med.capacidadeCaixa);
     setEstoqueCaixas(med.estoqueCaixas);
     setDose(med.dose);
-    
-    // 👇 MUDANÇA 2: Carrega a lista direta (ou cria uma padrão se estiver vazio)
     setHorarios(med.horarios && med.horarios.length > 0 ? med.horarios : ['08:00']);
-    
     setObsMed(med.obs);
     setGramatura(med.gramatura || '');
     setFrequencia(med.frequenciaTipo);
@@ -220,7 +217,6 @@ export default function PatientDetails() {
   async function handleSaveMed(e) {
     e.preventDefault();
     
-    // 👇 MUDANÇA 3: Limpa horários vazios antes de salvar
     const listaHorariosLimpa = horarios.filter(h => h !== "");
 
     if(listaHorariosLimpa.length === 0) {
@@ -235,12 +231,12 @@ export default function PatientDetails() {
 
     const dadosBase = {
         pacienteId: id,
-        userId: user.uid, // 🔒 SEGURANÇA: Vincula ao dono da conta para o filtro funcionar
+        userId: user.uid, 
         nome: nomeMed,
         capacidadeCaixa: Number(capacidadeCaixa),
         dose: Number(dose),
         gramatura: gramatura, 
-        horarios: listaHorariosLimpa, // Salva o array direto
+        horarios: listaHorariosLimpa,
         obs: obsMed,
         frequenciaTipo: frequencia,
         frequenciaDias: diasSemana,
@@ -268,7 +264,7 @@ export default function PatientDetails() {
 
   function resetForm() {
     setNomeMed(''); setCapacidadeCaixa(30); setEstoqueCaixas(1); setDose(1);
-    setHorarios(['08:00']); // Reseta para array
+    setHorarios(['08:00']); 
     setObsMed(''); setFrequencia('diario');
     setDiasSemana([]); setIntervalo(2); setGramatura('');
   }
@@ -314,7 +310,6 @@ export default function PatientDetails() {
           case 'AJUSTE_MANUAL': 
             return <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-[10px] font-bold uppercase">⚙️ Ajuste Manual</span>;
           
-          // 👇 O NOVO ALERTA "CHAMATIVO"
           case 'FALTA_ESTOQUE': 
             return (
                 <span className="bg-red-600 text-white px-2 py-1 rounded text-[10px] font-bold uppercase flex items-center gap-1 animate-pulse">
@@ -418,7 +413,7 @@ export default function PatientDetails() {
         <Plus size={28} />
       </button>
 
-      {/* MODAL DE HISTÓRICO */}
+     {/* MODAL DE HISTÓRICO */}
       {showHistoryModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
             <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
@@ -448,10 +443,14 @@ export default function PatientDetails() {
                                     </div>
                                 </div>
                                 <p className="font-bold text-gray-800">{item.medicamentoNome}</p>
-                                <p className="text-sm text-gray-600">{item.detalhe}</p>
+                                
+                                <p className="text-sm text-gray-600 mt-1 whitespace-pre-line leading-relaxed">
+                                    {item.detalhe}
+                                </p>
+
                                 <div className="mt-2 pt-2 border-t border-gray-50 flex items-center gap-1 text-[10px] text-gray-400">
                                     <User size={10} />
-                                    {item.usuario === 'Sistema Automático' ? '🤖 Robô' : item.usuario}
+                                    {item.usuario}
                                 </div>
                             </div>
                         ))
