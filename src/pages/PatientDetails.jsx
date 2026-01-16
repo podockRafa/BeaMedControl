@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../services/firebaseConnection';
 import { AuthContext } from '../contexts/AuthContext'; 
 import { doc, getDoc, collection, addDoc, query, onSnapshot, where, deleteDoc, updateDoc, orderBy, getDocs } from 'firebase/firestore'; 
-import { ArrowLeft, Pill, Plus, Package, Clock, Calendar, Trash2, Pencil, Settings, RotateCcw, Syringe, Save, AlertTriangle, History, X, User } from 'lucide-react'; 
+import { ArrowLeft, Pill, Plus, Package, Clock, Calendar, Trash2, Pencil, Settings, RotateCcw, Syringe, Save, AlertTriangle, History, X, User, Minus } from 'lucide-react'; 
 import { processarConsumo } from '../utils/robot'; 
 
 export default function PatientDetails() {
@@ -88,12 +88,11 @@ export default function PatientDetails() {
     setHorarios(novaLista);
   }
 
-  // --- FUNÇÃO DE BUSCAR HISTÓRICO (CORRIGIDA) ---
+  // --- FUNÇÃO DE BUSCAR HISTÓRICO ---
   async function handleOpenHistory() {
       setShowHistoryModal(true);
       setLoadingHistory(true);
       try {
-          // 👇 AQUI ESTÁ A CORREÇÃO: Traz só o histórico DO PACIENTE ATUAL
           const q = query(
               collection(db, "historico_medicamentos"), 
               where("pacienteId", "==", id), 
@@ -108,7 +107,7 @@ export default function PatientDetails() {
           setHistoryList(lista);
 
       } catch (error) {
-          console.log("Erro ao buscar histórico. Verifique se criou o índice no Firebase Console.", error);
+          console.log("Erro ao buscar histórico.", error);
       } finally {
           setLoadingHistory(false);
       }
@@ -133,6 +132,7 @@ export default function PatientDetails() {
   // --- FUNÇÕES DE MALEABILIDADE ---
   function handleOpenOptions(med) {
       setSelectedMed(med);
+      // Preenche os estados manuais com os dados atuais do remédio
       setManualCaixaAtiva(med.caixaAtivaRestante);
       setManualEstoque(med.estoqueCaixas);
       setShowOptionsModal(true);
@@ -176,6 +176,7 @@ export default function PatientDetails() {
       if(!selectedMed) return;
       try {
           await updateDoc(doc(db, "medicamentos", selectedMed.id), {
+              // Usa os estados manuais corretos
               caixaAtivaRestante: Number(manualCaixaAtiva),
               estoqueCaixas: Number(manualEstoque)
           });
@@ -414,7 +415,7 @@ export default function PatientDetails() {
       </button>
 
      {/* MODAL DE HISTÓRICO */}
-      {showHistoryModal && (
+     {showHistoryModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
             <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
                 
@@ -460,7 +461,7 @@ export default function PatientDetails() {
           </div>
       )}
 
-      {/* MODAL OPÇÕES */}
+      {/* MODAL OPÇÕES (COM OS NOMES CERTOS AGORA!) */}
       {showOptionsModal && selectedMed && (
           <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
             <div className="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-slide-up">
@@ -486,25 +487,77 @@ export default function PatientDetails() {
                         </button>
                     </div>
 
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-4">
-                        <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-3">
-                            <AlertTriangle size={16} className="text-orange-500"/>
-                            Correção de Inventário
-                        </h4>
-                        <div className="flex gap-4">
-                            <div className="flex-1">
-                                <label className="text-[10px] uppercase font-bold text-gray-500">Na Cartela</label>
-                                <input type="number" className="w-full p-2 border rounded bg-white font-bold text-center"
-                                    value={manualCaixaAtiva} onChange={(e) => setManualCaixaAtiva(e.target.value)} />
-                            </div>
-                            <div className="flex-1">
-                                <label className="text-[10px] uppercase font-bold text-gray-500">Estoque (cx)</label>
-                                <input type="number" className="w-full p-2 border rounded bg-white font-bold text-center"
-                                    value={manualEstoque} onChange={(e) => setManualEstoque(e.target.value)} />
-                            </div>
+                    {/* --- BLOCO DE CORREÇÃO DE INVENTÁRIO (CORRIGIDO) --- */}
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-2 mb-3 text-orange-600 font-bold">
+                            <AlertTriangle size={18} />
+                            <h3>Correção de Inventário</h3>
                         </div>
-                        <button onClick={handleSalvarAjusteManual} className="w-full mt-3 bg-gray-800 text-white py-2 rounded text-sm font-bold flex items-center justify-center gap-2 hover:bg-gray-900">
-                            <Save size={16} /> Salvar Correção
+
+                        <div className="grid grid-cols-2 gap-4">
+                            
+                            {/* CAMPO 1: NA CARTELA (manualCaixaAtiva) */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Na Cartela</label>
+                                <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
+                                    <button 
+                                        onClick={() => setManualCaixaAtiva(prev => Math.max(0, Number(prev) - 1))}
+                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-600 transition border-r border-gray-200"
+                                    >
+                                        <Minus size={16} />
+                                    </button>
+                                    
+                                    <input
+                                        type="number"
+                                        className="w-full text-center font-bold text-gray-800 focus:outline-none p-2 appearance-none"
+                                        value={manualCaixaAtiva}
+                                        onChange={(e) => setManualCaixaAtiva(Number(e.target.value))}
+                                    />
+
+                                    <button 
+                                        onClick={() => setManualCaixaAtiva(prev => Number(prev) + 1)}
+                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-green-600 transition border-l border-gray-200"
+                                    >
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* CAMPO 2: ESTOQUE (manualEstoque) */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Estoque (Cx)</label>
+                                <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
+                                    <button 
+                                        onClick={() => setManualEstoque(prev => Math.max(0, Number(prev) - 1))}
+                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-600 transition border-r border-gray-200"
+                                    >
+                                        <Minus size={16} />
+                                    </button>
+
+                                    <input
+                                        type="number"
+                                        className="w-full text-center font-bold text-gray-800 focus:outline-none p-2 appearance-none"
+                                        value={manualEstoque}
+                                        onChange={(e) => setManualEstoque(Number(e.target.value))}
+                                    />
+
+                                    <button 
+                                        onClick={() => setManualEstoque(prev => Number(prev) + 1)}
+                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-blue-600 transition border-l border-gray-200"
+                                    >
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <button
+                            onClick={handleSalvarAjusteManual}
+                            className="mt-4 w-full bg-slate-800 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-slate-900 transition"
+                        >
+                            <Save size={18} />
+                            Salvar Correção
                         </button>
                     </div>
                 </div>
@@ -580,7 +633,6 @@ export default function PatientDetails() {
                         <label className="label-form">Dose (comps)</label>
                         <input required type="number" className="input-form" value={dose} onChange={e => setDose(e.target.value)}/>
                     </div>
-                    {/* 👇 CAMPO DE HORÁRIOS NOVO E MODERNO */}
                     <div>
                         <label className="label-form flex justify-between items-center">
                             Horários

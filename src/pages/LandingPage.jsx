@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot, ShieldCheck, Clock, CheckCircle, ArrowRight, Star, HeartPulse, Smartphone } from 'lucide-react';
+import logoImg from '../assets/logo.png'; 
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -10,12 +11,20 @@ export default function LandingPage() {
       
       {/* --- NAVBAR --- */}
       <nav className="flex justify-between items-center p-6 max-w-6xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="bg-blue-600 p-2 rounded-lg">
-            <HeartPulse size={24} className="text-white" />
-          </div>
-          <span className="text-xl font-bold text-gray-800 tracking-tight">BeamedControl</span>
+        <div className="flex items-center gap-1">
+          
+          {/* 👇 AQUI A MÁGICA: O ícone saiu, entrou sua imagem */}
+          <img 
+            src={logoImg} 
+            alt="Logo BeamedControl" 
+            className="h-20 w-auto object-contain" 
+          />
+
+          {/* Se o seu logo JÁ TIVER o nome escrito nele, você pode apagar a linha abaixo (span) 
+          <span className="text-xl font-bold text-blue-600">BeaMedControl</span>*/}
+        
         </div>
+
         <div className="flex gap-4">
             <button 
                 onClick={() => navigate('/login')}
@@ -24,7 +33,7 @@ export default function LandingPage() {
                 Já tenho conta
             </button>
             <button 
-                onClick={() => navigate('/login')} // Manda pro cadastro
+                onClick={() => navigate('/login')} 
                 className="hidden sm:block bg-blue-600 text-white px-5 py-2 rounded-full font-bold hover:bg-blue-700 transition shadow-lg hover:shadow-blue-200"
             >
                 Acessar Sistema
@@ -32,12 +41,13 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* --- HERO SECTION (A Promessa) --- */}
-      <header className="max-w-6xl mx-auto px-6 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    {/* --- HERO SECTION (A Promessa) --- */}
+    {/* 👇 MUDEI AQUI: Tirei o py-16/py-24 e coloquei pt-6 (celular) e md:pt-12 (pc) */}
+    <header className="max-w-6xl mx-auto px-6 pt-6 pb-16 md:pt-12 md:pb-24 grid md:grid-cols-2 gap-12 items-center">
         <div className="space-y-6 animate-slide-up">
-            <div className="inline-block bg-blue-100 text-blue-700 px-4 py-1.5 rounded-full text-sm font-bold mb-2">
+                <div className="inline-block bg-blue-100 text-blue-700 px-4 py-1.5 rounded-full text-sm font-bold mb-2">
                 🚀 O App nº 1 para Enfermeiros e Cuidadores
-            </div>
+        </div>
             <h1 className="text-4xl md:text-6xl font-extrabold leading-tight text-gray-900">
                 Seu Plantão no <span className="text-blue-600">Piloto Automático.</span>
             </h1>
@@ -170,7 +180,7 @@ export default function LandingPage() {
             >
                 Quero Assinar Agora
             </button>
-            <p className="text-xs text-gray-400 mt-4">Pagamento seguro via Pix ou Cartão</p>
+            <p className="text-xs text-gray-400 mt-4">Pagamento seguro via Pix ou Cartão de crédito</p>
         </div>
       </section>
 
