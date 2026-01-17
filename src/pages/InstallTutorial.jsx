@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Smartphone, Apple } from 'lucide-react';
+import { ArrowLeft, Smartphone, Apple, CheckCircle } from 'lucide-react'; // Adicionei CheckCircle
 
 export default function InstallTutorial() {
   const navigate = useNavigate();
@@ -10,76 +10,95 @@ export default function InstallTutorial() {
   // DADOS DO TUTORIAL
   const tutorials = {
     android: [
-        {
-        title: "1. Manual de Instalação do BeaMedControl",
+      {
+        title: "Manual de Instalação do BeaMedControl",
         desc: "Este manual irá te ajudar a instalar nosso aplicativo no seu aparelho Android",
-        img: "/9.png" // 👈 Coloque o nome da sua foto aqui
+        img: "/9.png" 
       },
       {
-        title: "2. Abra o Menu",
+        title: "1. Abra o Menu",
         desc: "No navegador Chrome, clique nos 3 pontinhos no canto superior direito.",
-        img: "/10.png" // 👈 Coloque o nome da sua foto aqui
+        img: "/10.png" 
       },
       {
-        title: "3. Adicionar à tela inicial",
+        title: "2. Adicionar à tela inicial",
         desc: "Procure pela opção Adicionar à tela inicial e clique nela.",
         img: "/11.png"
       },
       {
-        title: "4. Escolha a opção instalar",
+        title: "3. Escolha a opção instalar",
         desc: "Vai aparecer 2 opções, escolha a opção INSTALAR. ",
         img: "/12.png"
       },
       {
-        title: "5. Confirme a instalação",
+        title: "4. Confirme a instalação",
         desc: "Confirme se é o nosso ícone que aparece e clique em INSTALAR.  ",
         img: "/13.png"
       },
       {
-        title: "6. Acesse nosso aplicativo",
+        title: "5. Acesse nosso aplicativo",
         desc: "Aguarde em média 1 minuto e confira se nosso ícone já está na sua tela inicial. Se já estiver, pode clicar nele e usar o aplicativo. ",
         img: "/14.png"
       }
     ],
     ios: [
       {
-        title: "1. Manual de Instalação do BeaMedControl",
+        title: "Manual de Instalação do BeaMedControl",
         desc: "Este manual irá te ajudar a instalar nosso aplicativo no seu aparelho Iphone",
         img: "/9.png"
+      },
+      {
+        title: "1. Abra o Menu",
+        desc: "No navegador Safari, no nosso site, clique no ícone de compartilhar no menu inferior.",
+        img: "/1ios.png" 
+      },
+      {
+        title: "2. Adicionar à tela inicial",
+        desc: "Procure pela opção Adicionar à tela de início e clique nela.",
+        img: "/2ios.png"
+      },
+      {
+        title: "3. Escolha a opção Adicionar à tela início",
+        desc: "Vai aparecer 2 opções, escolha a opção ADICIONAR. ",
+        img: "/3ios.png"
+      },
+      {
+        title: "4. Acesse nosso aplicativo",
+        desc: "Aguarde em média 1 minuto e confira se nosso ícone já está na sua tela inicial. Se já estiver, pode clicar nele e usar o aplicativo. ",
+        img: "/4ios.png"
       }
     ]
   };
 
   const currentSteps = tutorials[platform];
 
+  // 👇 AQUI ESTÁ A MUDANÇA PRINCIPAL
   function nextStep() {
+    // Só avança se NÃO for o último passo
     if (step < currentSteps.length - 1) {
         setStep(step + 1);
-    } else {
-        // Se estiver no último passo, vai para o login
-        navigate('/login');
-    }
+    } 
+    // Se for o último, ele não faz nada (o else foi removido).
+    // O usuário continua na tela vendo a última imagem.
   }
 
   function prevStep() {
     if (step > 0) setStep(step - 1);
   }
 
-  // 👇 CORREÇÃO: Lógica à prova de falhas
   function handleStoryClick(e) {
-    // 1. Pega as coordenadas exatas do container na tela
     const rect = e.currentTarget.getBoundingClientRect();
-    
-    // 2. Calcula onde foi o clique relativo ao container (X do mouse - Esquerda do elemento)
     const x = e.clientX - rect.left;
     
-    // 3. Verifica se foi na metade direita ou esquerda
     if (x > rect.width / 2) {
         nextStep();
     } else {
         prevStep();
     }
   }
+
+  // Verifica se é o último passo para mostrar o botão especial
+  const isLastStep = step === currentSteps.length - 1;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -119,7 +138,7 @@ export default function InstallTutorial() {
         {/* ÁREA INTERATIVA (STORIES) */}
         <div className="flex-1 flex flex-col items-center justify-start relative">
             
-            {/* Barra de Progresso (Barrinhas no topo igual Instagram) */}
+            {/* Barra de Progresso */}
             <div className="flex gap-1 w-full max-w-[280px] mb-2 px-1">
                 {currentSteps.map((_, i) => (
                     <div 
@@ -142,28 +161,33 @@ export default function InstallTutorial() {
                     className="w-full h-full object-cover rounded-xl pointer-events-none select-none"
                 />
 
-                {/* Área de toque invisível para feedback visual (opcional) */}
-                <div className="absolute inset-0 flex">
-                    <div className="w-1/2 h-full"></div> {/* Esquerda */}
-                    <div className="w-1/2 h-full"></div> {/* Direita */}
-                </div>
-
                 {/* Dica visual no primeiro passo */}
                 {step === 0 && (
-                     <div className="absolute bottom-4 right-4 bg-black/60 text-white text-xs px-3 py-1 rounded-full animate-pulse pointer-events-none">
+                      <div className="absolute bottom-4 right-4 bg-black/60 text-white text-xs px-3 py-1 rounded-full animate-pulse pointer-events-none">
                         Toque aqui para avançar 👉
-                     </div>
+                      </div>
                 )}
             </div>
 
             {/* TEXTO */}
-            <div className="text-center px-4 h-24 max-w-[320px]">
+            <div className="text-center px-4 max-w-[320px]">
                 <h2 className="text-xl font-bold text-gray-800 mb-2 transition-all animate-fade-in">
                     {currentSteps[step].title}
                 </h2>
-                <p className="text-gray-600 text-sm leading-relaxed animate-fade-in">
+                <p className="text-gray-600 text-sm leading-relaxed animate-fade-in mb-4">
                     {currentSteps[step].desc}
                 </p>
+
+                {/* 👇 BOTÃO EXTRA: Só aparece no final */}
+                {isLastStep && (
+                    <button 
+                        onClick={() => navigate('/login')}
+                        className="bg-hospital-blue text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-blue-700 transition flex items-center gap-2 mx-auto animate-slide-up"
+                    >
+                        <CheckCircle size={20} />
+                        Pronto, acessar sistema
+                    </button>
+                )}
             </div>
 
         </div>

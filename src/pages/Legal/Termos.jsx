@@ -28,7 +28,7 @@ export default function Termos() {
         {/* Conteúdo do Texto */}
         <div className="p-8 space-y-6 text-gray-700 leading-relaxed">
             
-            <p className="text-sm text-gray-400 italic">Última atualização: 04 de Janeiro de 2026</p>
+            <p className="text-sm text-gray-400 italic">Última atualização: 16 de Janeiro de 2026</p>
 
             <section>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">1. Aceitação dos Termos</h3>
@@ -40,52 +40,60 @@ export default function Termos() {
             <section>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">2. Descrição do Serviço</h3>
                 <p>
-                    O BeaMedControl é uma ferramenta SaaS (Software as a Service) destinada a enfermeiros, cuidadores e clínicas para auxiliar na organização de pacientes, anotações de prontuários e checklists de rotina. Nós fornecemos a tecnologia, mas <strong>não realizamos serviços médicos</strong> nem nos responsabilizamos pelas decisões clínicas tomadas pelos usuários.
+                    O BeaMedControl é uma ferramenta SaaS (Software as a Service) destinada a auxiliar na organização de pacientes, controle de estoque de medicamentos e automação de baixas via sistema (Robô). Nós fornecemos a tecnologia para gestão, mas <strong>não realizamos serviços médicos</strong>.
                 </p>
             </section>
 
             <section>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">3. Conta e Segurança</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                    <li>Você é responsável por manter a confidencialidade de suas credenciais de acesso (Login Google ou Senha).</li>
-                    <li>Você é o único responsável por todas as atividades que ocorram em sua conta.</li>
-                    <li>O cadastro é permitido apenas para maiores de 18 anos e profissionais ou estudantes da área de saúde.</li>
-                </ul>
-            </section>
-
-            <section>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">4. Assinatura e Pagamentos</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">3. Período de Testes (Trial)</h3>
                 <p>
-                    O uso contínuo da plataforma requer uma assinatura ativa.
-                </p>
-                <ul className="list-disc pl-5 space-y-1 mt-2">
-                    <li><strong>Processamento:</strong> Os pagamentos são processados de forma segura pela instituição de pagamento parceira <strong>Asaas Gestão Financeira S.A.</strong>.</li>
-                    <li><strong>Renovação:</strong> As assinaturas são mensais e renovadas automaticamente até que haja o cancelamento.</li>
-                    <li><strong>Inadimplência:</strong> Em caso de falha no pagamento, o acesso às funcionalidades premium poderá ser suspenso até a regularização.</li>
-                </ul>
-            </section>
-
-            <section>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">5. Cancelamento e Exclusão de Dados</h3>
-                <p>
-                    Você pode cancelar sua assinatura a qualquer momento através do painel do usuário. O cancelamento interrompe cobranças futuras, mas não reembolsa valores já pagos pelo período vigente.
+                    Oferecemos um período de degustação gratuito de <strong>72 horas</strong> (3 dias) após o cadastro. Durante este período, todas as funcionalidades estão liberadas.
                 </p>
                 <p className="mt-2">
-                    Você tem o direito de <strong>excluir definitivamente sua conta</strong> através da opção "Excluir Minha Conta" no perfil. Esta ação é irreversível e removerá todos os dados de pacientes e históricos associados ao seu usuário.
+                    Após o término das 72 horas, o acesso ao painel será bloqueado automaticamente até que uma assinatura seja ativada. Não haverá cobrança automática ao fim do teste sem a sua expressa autorização e inserção de dados de pagamento.
                 </p>
             </section>
 
             <section>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">6. Responsabilidade sobre Dados de Terceiros</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">4. Conta e Segurança</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                    <li>Você é responsável por manter a confidencialidade de suas credenciais de acesso.</li>
+                    <li>O cadastro é permitido apenas para maiores de 18 anos e profissionais ou cuidadores da área de saúde.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">5. Assinatura e Pagamentos</h3>
+                <ul className="list-disc pl-5 space-y-1 mt-2">
+                    <li><strong>Processamento:</strong> Os pagamentos são processados de forma segura pela instituição parceira <strong>Asaas Gestão Financeira S.A.</strong>.</li>
+                    <li><strong>Renovação:</strong> As assinaturas são mensais e renovadas automaticamente até o cancelamento.</li>
+                    <li><strong>Bloqueio:</strong> Em caso de falha no pagamento, o acesso às funcionalidades será suspenso imediatamente.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">6. Cancelamento e Exclusão</h3>
                 <p>
-                    Ao cadastrar dados de pacientes na plataforma, você declara estar ciente de que atua como <strong>Controlador</strong> desses dados perante a LGPD, sendo o BeaMedControl apenas o <strong>Operador</strong> tecnológico. Você garante ter a autorização necessária ou base legal para inserir tais informações no sistema.
+                    Você pode cancelar sua assinatura a qualquer momento. O cancelamento interrompe cobranças futuras, mas não reembolsa valores já pagos pelo mês vigente. Você também pode solicitar a exclusão definitiva de seus dados e conta através do painel.
                 </p>
             </section>
 
             <section>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">7. Alterações nos Termos</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">7. Limitação de Responsabilidade (Automação)</h3>
                 <p>
-                    Reservamo-nos o direito de modificar estes termos a qualquer momento. Notificaremos sobre alterações significativas através do e-mail cadastrado ou aviso na plataforma.
+                    O sistema possui funcionalidades de automação ("Robô") que realizam a baixa de estoque baseada em horários programados. <strong>Atenção:</strong>
+                </p>
+                <ul className="list-disc pl-5 space-y-1 mt-2">
+                    <li>O sistema serve como <strong>apoio administrativo</strong> e não substitui a conferência física do estoque e a responsabilidade clínica do profissional.</li>
+                    <li>Não nos responsabilizamos por falhas na internet, falta de energia ou erros de configuração que impeçam o robô de rodar no horário exato.</li>
+                    <li>É dever do usuário conferir se a medicação foi efetivamente administrada ao paciente, independentemente do status no sistema.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">8. Responsabilidade sobre Dados (LGPD)</h3>
+                <p>
+                    Ao cadastrar pacientes, você atua como <strong>Controlador</strong> desses dados. O BeaMedControl atua apenas como <strong>Operador</strong> tecnológico. Você garante ter autorização legal para gerir as informações de saúde inseridas na plataforma.
                 </p>
             </section>
 

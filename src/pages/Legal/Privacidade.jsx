@@ -28,7 +28,7 @@ export default function Privacidade() {
         {/* Conteúdo do Texto */}
         <div className="p-8 space-y-6 text-gray-700 leading-relaxed">
             
-            <p className="text-sm text-gray-400 italic">Última atualização: 04 de Janeiro de 2026</p>
+            <p className="text-sm text-gray-400 italic">Última atualização: 16 de Janeiro de 2026</p>
 
             <section>
                 <p>
@@ -51,12 +51,16 @@ export default function Privacidade() {
                     <p><strong>A. Dados do Usuário (Você):</strong></p>
                     <ul className="list-disc pl-5 text-sm">
                         <li>Nome, E-mail e Foto (para identificação e login).</li>
-                        <li>CPF/CNPJ (exigido para emissão de cobranças e notas fiscais).</li>
+                        <li>CPF/CNPJ (exigido para emissão de cobranças via Asaas).</li>
                     </ul>
                     <p><strong>B. Dados de Terceiros (Pacientes):</strong></p>
                     <ul className="list-disc pl-5 text-sm">
                         <li>Nome, observações de saúde e status clínico.</li>
-                        <li>Esses dados são criptografados e visíveis apenas para você.</li>
+                        <li>Medicamentos, dosagens e horários de tratamento.</li>
+                    </ul>
+                    <p><strong>C. Logs e Auditoria:</strong></p>
+                    <ul className="list-disc pl-5 text-sm">
+                        <li>O sistema registra automaticamente um histórico de ações (quem criou um paciente, quem baixou estoque, ações do robô) para fins de segurança e auditoria do próprio usuário.</li>
                     </ul>
                 </div>
             </section>
@@ -78,7 +82,7 @@ export default function Privacidade() {
             </section>
 
             <section>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">5. Seus Direitos (Titular dos Dados)</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">5. Seus Direitos</h3>
                 <p>Você pode, a qualquer momento:</p>
                 <ul className="list-disc pl-5 space-y-1 mt-2">
                     <li>Solicitar acesso aos seus dados armazenados.</li>
