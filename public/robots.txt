@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Bloquear áreas administrativas (O Google não precisa ler o painel logado)
+Disallow: /dashboard
+Disallow: /admin
+
+# Onde está o mapa do site
+Sitemap: https://beamedcontrol.web.app/sitemap.xml
