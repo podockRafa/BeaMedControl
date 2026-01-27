@@ -19,9 +19,6 @@ export default function LandingPage() {
             alt="Logo BeamedControl" 
             className="h-20 w-auto object-contain" 
           />
-
-          {/* Se o seu logo JÁ TIVER o nome escrito nele, você pode apagar a linha abaixo (span) 
-          <span className="text-xl font-bold text-blue-600">BeaMedControl</span>*/}
         
         </div>
 

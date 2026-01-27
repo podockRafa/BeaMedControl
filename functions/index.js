@@ -1,6 +1,6 @@
 /**
  * ARQUIVO MESTRE: ROBÔ (CRON) + PAGAMENTOS (ASAAS)
- * Versão Final: Corrigida e Otimizada
+ * Versão Final: Otimizada com Query de Horas (Baixo Custo) 🚀
  */
 
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -22,7 +22,7 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
 
 // ==================================================================
-// 🤖 PARTE 1: ROBÔ BEA (Versão Blindada Anti-NaN e Fuso BR) 🇧🇷
+// 🤖 PARTE 1: ROBÔ BEA (Versão Otimizada e Blindada) 🇧🇷
 // ==================================================================
 
 exports.verificarEstoque = onSchedule({
@@ -32,18 +32,41 @@ exports.verificarEstoque = onSchedule({
 }, async (event) => {
     
     const agora = new Date();
-    logger.info(`🤖 Robô Bea iniciada: ${agora.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`);
+    
+    // 1. CALCULA AS HORAS PARA O FILTRO OTIMIZADO
+    // Pega a hora atual do Brasil (ex: se são 13:00, pega 13)
+    const horaAtual = parseInt(agora.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", hour: '2-digit', hour12: false }));
+    
+    // Calcula a hora anterior para garantir que não perdemos nada (ex: 12)
+    // Se for 00h (meia noite), a anterior é 23h
+    const horaAnterior = horaAtual === 0 ? 23 : horaAtual - 1;
+
+    logger.info(`🤖 Robô Bea iniciada: Buscando remédios das janelas ${horaAnterior}h e ${horaAtual}h`);
 
     try {
-        const snapshot = await db.collection("medicamentos").get();
-        if (snapshot.empty) return;
+        // 🔥 A MÁGICA DA OTIMIZAÇÃO: QUERY DIRECIONADA
+        // Em vez de ler TODOS os remédios do banco, lê apenas:
+        // 1. Os que estão ativos
+        // 2. Os que têm horário marcado para a hora atual ou anterior (usando o índice)
+        const snapshot = await db.collection("medicamentos")
+            .where("status", "==", "ativo") 
+            .where("horarios_horas", "array-contains-any", [horaAnterior, horaAtual])
+            .get();
+
+        if (snapshot.empty) {
+            logger.info("💤 Nenhum remédio agendado para este horário. Economizamos leituras!");
+            return;
+        }
 
         const mapPacientes = {};
 
-        // 1. Agrupa por Paciente
+        // 2. Agrupa por Paciente
         snapshot.forEach(doc => {
             const med = doc.data();
-            if (med.status === 'pausado' || !med.horarios) return;
+            // Nota: Não precisamos mais checar se status == 'pausado' aqui, 
+            // pois a query lá em cima já filtrou apenas os 'ativo'.
+            
+            if (!med.horarios) return;
             
             if (!mapPacientes[med.pacienteId]) {
                 mapPacientes[med.pacienteId] = [];
@@ -51,7 +74,7 @@ exports.verificarEstoque = onSchedule({
             mapPacientes[med.pacienteId].push({ id: doc.id, ref: doc.ref, data: med });
         });
 
-        // 2. Processa cada Paciente
+        // 3. Processa cada Paciente
         const promisesPacientes = Object.keys(mapPacientes).map(async (pacienteId) => {
             const listaMeds = mapPacientes[pacienteId];
             let relatorioFinal = []; 
@@ -82,7 +105,7 @@ exports.verificarEstoque = onSchedule({
                 }
             }
 
-            // 3. Salva o Card Agrupado (Aqui que estava o erro do nome!)
+            // 4. Salva o Card Agrupado
             if (houveAcao && relatorioFinal.length > 0) {
                 const textoDetalhe = relatorioFinal.join("\n");
 
@@ -90,7 +113,7 @@ exports.verificarEstoque = onSchedule({
                     data: agora.toISOString(),
                     pacienteId: pacienteId,
                     medicamentoId: "AGRUPADO", 
-                    medicamentoNome: "💊 Visita do Robô Bea", // O NOME CERTO
+                    medicamentoNome: "💊 Visita do Robô Bea",
                     acao: "ROBO_CONSUMO",
                     detalhe: textoDetalhe,
                     usuario: "🤖 Robô Bea"
@@ -99,14 +122,14 @@ exports.verificarEstoque = onSchedule({
         });
 
         await Promise.all(promisesPacientes);
-        logger.info("✅ Ciclo do Robô Bea finalizado.");
+        logger.info(`✅ Ciclo do Robô Bea finalizado. Processados ${snapshot.size} remédios.`);
 
     } catch (error) {
         logger.error("❌ Erro no robô:", error);
     }
 });
 
-// 👇 Substitua a função auxiliar lá no final do arquivo functions/index.js
+// 👇 FUNÇÃO AUXILIAR BLINDADA
 
 async function processarDescontoBlindado(docRef, med, medId, horariosVencidos, agora) {
     // 🛡️ 1. CONVERSÃO SEGURA (BLINDAGEM)
@@ -121,16 +144,13 @@ async function processarDescontoBlindado(docRef, med, medId, horariosVencidos, a
     // Calcula quantos comprimidos existem NO TOTAL (Somando caixa aberta + caixas fechadas)
     const totalDisponivel = caixaAtiva + (estoqueCaixas * capacidade);
 
-    // 🛑 2. VERIFICAÇÃO DE ESTOQUE ZERO (A MUDANÇA ESTÁ AQUI)
+    // 🛑 2. VERIFICAÇÃO DE ESTOQUE ZERO
     if (totalDisponivel < qtdNecessaria) {
-        // Se não tem remédio suficiente, a gente NÃO SUBTRAI nada.
-        // Apenas atualizamos a data para o robô não ficar tentando de novo daqui a 1 hora.
         await docRef.update({
             ultimaChecagem: agora.toISOString()
         });
 
         const horariosTexto = horariosVencidos.join(", ");
-        // Retorna a mensagem de erro para o histórico
         return `🚫 ${med.nome}: NÃO TOMOU! Estoque insuficiente para ${qtdNecessaria} dose(s) das ${horariosTexto}.`;
     }
 
@@ -146,8 +166,6 @@ async function processarDescontoBlindado(docRef, med, medId, horariosVencidos, a
             novaCaixa += capacidade; // Enche a cartela
             alertaTrocaCaixa = true;
         } else {
-            // Isso aqui teoricamente nunca vai acontecer por causa do IF lá em cima,
-            // mas deixamos como segurança.
             novaCaixa = 0; 
             break;
         }
@@ -160,7 +178,6 @@ async function processarDescontoBlindado(docRef, med, medId, horariosVencidos, a
         ultimaChecagem: agora.toISOString()
     });
 
-    // Retorna a frase de sucesso
     const horariosTexto = horariosVencidos.join(", ");
     let msgExtra = alertaTrocaCaixa ? " (Abriu nova caixa 📦)" : "";
     
@@ -280,66 +297,3 @@ exports.webhookAsaas = onRequest(async (req, res) => {
         return res.status(200).json({ received: false }); 
     }
 });
-
-
-// ==================================================================
-// 🧠 FUNÇÕES AUXILIARES ÚNICAS (Lógica de Desconto e Estoque)
-// ==================================================================
-
-async function processarDesconto(docRef, med, medId, qtdHorarios, agora) {
-    const dosePorTomada = Number(med.dose || 1);
-    // TOTAL DE COMPRIMIDOS = (Quantos horários passaram) * (Quantos comprimidos por vez)
-    const totalComprimidosNecessarios = qtdHorarios * dosePorTomada;
-    
-    // 1. Estoque TOTAL Real
-    const estoqueTotalFisico = Number(med.caixaAtivaRestante) + (Number(med.estoqueCaixas) * Number(med.capacidadeCaixa));
-
-    // 🚨 FALTA DE ESTOQUE
-    if (estoqueTotalFisico < totalComprimidosNecessarios) {
-        logger.warn(`🚫 FALTA DE ESTOQUE: ${med.nome}`);
-        
-        await db.collection("historico_medicamentos").add({
-            data: agora.toISOString(),
-            pacienteId: med.pacienteId,
-            medicamentoId: medId,
-            medicamentoNome: med.nome,
-            acao: "FALTA_ESTOQUE",
-            detalhe: `PACIENTE NÃO TOMOU! Necessário ${totalComprimidosNecessarios} un, estoque insuficiente.`,
-            usuario: "Sistema Automático"
-        });
-
-        // Só atualiza a hora para não travar o robô
-        await docRef.update({ ultimaChecagem: agora.toISOString() });
-        return; 
-    }
-
-    // ✅ TEM ESTOQUE - DESCONTA
-    let novaCaixaAtiva = Number(med.caixaAtivaRestante) - totalComprimidosNecessarios;
-    let novoEstoque = Number(med.estoqueCaixas);
-
-    while (novaCaixaAtiva <= 0) {
-        if (novoEstoque > 0) {
-            novoEstoque--;
-            novaCaixaAtiva += Number(med.capacidadeCaixa);
-        } else {
-            break; 
-        }
-    }
-
-    await docRef.update({
-        caixaAtivaRestante: novaCaixaAtiva,
-        estoqueCaixas: novoEstoque,
-        ultimaChecagem: agora.toISOString()
-    });
-
-    await db.collection("historico_medicamentos").add({
-        data: agora.toISOString(),
-        pacienteId: med.pacienteId,
-        medicamentoId: medId,
-        medicamentoNome: med.nome,
-        acao: "ROBO_CONSUMO",
-        // 👇 MENSAGEM CORRIGIDA PARA O USUÁRIO ENTENDER
-        detalhe: `Robô baixou ${totalComprimidosNecessarios} comprimido(s) (ref. a ${qtdHorarios} horários).`,
-        usuario: "Sistema Automático"
-    });
-}

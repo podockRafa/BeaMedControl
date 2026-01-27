@@ -1,57 +1,54 @@
 // src/pages/WeekendChecklist.jsx
-import { useState, useEffect, useContext } from 'react'; // 👈 Adicionei useContext
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../contexts/AuthContext'; // 👈 Importei o Contexto
+import { AuthContext } from '../contexts/AuthContext';
 import { db } from '../services/firebaseConnection';
-// 👇 Adicionei o 'where' nas importações
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { ArrowLeft, CheckCircle, ShoppingCart, AlertTriangle } from 'lucide-react';
-import { differenceInCalendarDays, addDays, format } from 'date-fns';
+import { ArrowLeft, CheckCircle, ShoppingCart, AlertTriangle, User } from 'lucide-react'; // Adicionei User
+import { addDays, format, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function WeekendChecklist() {
-  const { user } = useContext(AuthContext); // 👈 Pegamos o usuário logado
+  const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [alertas, setAlertas] = useState([]);
+  const [pacientesEmRisco, setPacientesEmRisco] = useState([]);
+  const DIAS_PADRAO = 5; // <--- Mude aqui quando quiser o padrão geral
 
   useEffect(() => {
     async function gerarRelatorio() {
-      // 🔒 SEGURANÇA: Se não tem usuário carregado, não busca nada
       if (!user?.uid) return;
 
       try {
-        // 1. Busca SÓ os pacientes DESTE usuário
-        const qPacientes = query(
-            collection(db, "pacientes"), 
-            where("userId", "==", user.uid), // 🔒 O CADEADO
-            orderBy("nome")
-        );
+        // 1. Busca Pacientes
+        const qPacientes = query(collection(db, "pacientes"), where("userId", "==", user.uid), orderBy("nome"));
         const snapPacientes = await getDocs(qPacientes);
 
-        // 2. Busca SÓ os medicamentos DESTE usuário
-        const qMeds = query(
-            collection(db, "medicamentos"),
-            where("userId", "==", user.uid) // 🔒 O CADEADO
-        );
+        // 2. Busca Medicamentos
+        const qMeds = query(collection(db, "medicamentos"), where("userId", "==", user.uid));
         const snapMeds = await getDocs(qMeds);
 
         const mapaPacientes = {};
-        snapPacientes.forEach(doc => { mapaPacientes[doc.id] = doc.data().nome; });
+        // Guardamos o objeto completo (nome + diasVerificacao)
+        snapPacientes.forEach(doc => { mapaPacientes[doc.id] = doc.data(); });
 
-        let listaDeRisco = [];
-        const diasParaChecar = 4; 
+        // OBJETO PARA AGRUPAMENTO
+        // Estrutura: { "Ana": { nome: "Ana", statusGeral: "critico", meds: [...] }, "Joao": ... }
+        let grupos = {};
 
         snapMeds.forEach(doc => {
             const med = { id: doc.id, ...doc.data() };
-            
-            // Segurança extra: se por algum motivo o med não tiver paciente linkado no mapa, ignora
-            if(!mapaPacientes[med.pacienteId]) return;
+            const dadosPaciente = mapaPacientes[med.pacienteId];
 
-            // ESTOQUE TOTAL
+            if(!dadosPaciente) return;
+
+            // Pega dias personalizados ou usa 4 padrão
+            const diasParaChecar = Number(dadosPaciente.diasVerificacao || DIAS_PADRAO);
+
+            // Estoque Total
             const estoqueTotal = Number(med.caixaAtivaRestante) + (Number(med.estoqueCaixas) * Number(med.capacidadeCaixa));
 
-            // SIMULAÇÃO DE CONSUMO
+            // Simulação de Consumo
             let consumoNecessario = 0;
             let dataCursor = new Date();
             
@@ -63,47 +60,62 @@ export default function WeekendChecklist() {
             }
 
             // LÓGICA DE RISCO
+            let nivelRisco = null; // null, 'atencao' ou 'critico'
+            let faltaEmTexto = '';
+
             if (estoqueTotal < consumoNecessario) {
-                listaDeRisco.push({
+                nivelRisco = 'critico';
+                faltaEmTexto = estoqueTotal === 0 ? 'ACABOU' : 'VAI FALTAR';
+            } else if (estoqueTotal <= consumoNecessario + 2) {
+                nivelRisco = 'atencao';
+                faltaEmTexto = 'RISCO';
+            }
+
+            // SE TEM RISCO, ADICIONA NO GRUPO DO PACIENTE
+            if (nivelRisco) {
+                const nomePac = dadosPaciente.nome;
+
+                // Se o grupo desse paciente ainda não existe, cria
+                if (!grupos[nomePac]) {
+                    grupos[nomePac] = {
+                        nome: nomePac,
+                        diasCheck: diasParaChecar,
+                        statusGeral: 'atencao', // Começa leve, piora se tiver critico
+                        meds: []
+                    };
+                }
+
+                // Se esse remédio for crítico, o card inteiro vira crítico (vermelho)
+                if (nivelRisco === 'critico') {
+                    grupos[nomePac].statusGeral = 'critico';
+                }
+
+                // Adiciona o remédio na lista desse paciente
+                grupos[nomePac].meds.push({
                     id: med.id,
-                    pacienteNome: mapaPacientes[med.pacienteId],
-                    medNome: med.nome,
+                    nome: med.nome,
                     gramatura: med.gramatura || '',
                     estoqueTotal,
                     consumoNecessario,
-                    faltaEm: estoqueTotal === 0 ? 'ACABOU' : 'VAI FALTAR',
-                    status: 'critico'
-                });
-            } 
-            else if (estoqueTotal <= consumoNecessario + 2) { 
-                listaDeRisco.push({
-                    id: med.id,
-                    pacienteNome: mapaPacientes[med.pacienteId],
-                    medNome: med.nome,
-                    gramatura: med.gramatura || '',
-                    estoqueTotal,
-                    consumoNecessario,
-                    faltaEm: 'RISCO',
-                    status: 'atencao'
+                    faltaEm: faltaEmTexto,
+                    status: nivelRisco
                 });
             }
         });
 
-        setAlertas(listaDeRisco);
+        // Transforma o Objeto { Ana: {...}, Joao: {...} } em Array [ {...}, {...} ] para o React ler
+        setPacientesEmRisco(Object.values(grupos));
       
       } catch (error) {
-          console.error("Erro ao gerar checklist:", error);
+          console.error("Erro checklist:", error);
       } finally {
           setLoading(false);
       }
     }
 
-    // Só roda a função se o usuário estiver logado
-    if(user) {
-        gerarRelatorio();
-    }
+    if(user) gerarRelatorio();
 
-  }, [user]); // 👈 O efeito depende do 'user' agora
+  }, [user]);
 
   function ehDiaDeTomar(med, dataSimulada) {
     if(!med.dataInicioTratamento) return true;
@@ -120,11 +132,8 @@ export default function WeekendChecklist() {
     return false;
   }
 
-  const dataFinal = addDays(new Date(), 3);
-  const textoDataFinal = format(dataFinal, "EEEE", { locale: ptBR });
-
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 pb-20">
       <header className="bg-white p-4 shadow-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
           <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-full">
@@ -132,56 +141,77 @@ export default function WeekendChecklist() {
           </button>
           <div>
             <h1 className="text-xl font-bold text-gray-800">Previsão de Estoque</h1>
-            <p className="text-xs text-gray-500">Garantia para os próximos 4 dias (até {textoDataFinal})</p>
+            <p className="text-xs text-gray-500">Análise personalizada por paciente</p>
           </div>
         </div>
       </header>
 
-      <main className="p-4 max-w-2xl mx-auto pb-20">
+      <main className="p-4 max-w-2xl mx-auto space-y-6">
         {loading && <div className="flex justify-center mt-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hospital-blue"></div></div>}
 
-        {!loading && alertas.length === 0 && (
+        {!loading && pacientesEmRisco.length === 0 && (
             <div className="text-center mt-10 bg-green-50 p-8 rounded-lg border border-green-200 animate-fade-in">
                 <CheckCircle size={48} className="mx-auto text-green-500 mb-4"/>
                 <h2 className="text-lg font-bold text-green-700">Tudo Garantido!</h2>
-                <p className="text-green-600 text-sm">Você tem estoque suficiente para passar o fim de semana/feriado tranquilo.</p>
+                <p className="text-green-600 text-sm">Nenhum paciente corre risco de ficar sem medicação nos próximos dias.</p>
             </div>
         )}
 
-        <div className="space-y-3">
-            {alertas.map((item, index) => (
-                <div key={index} className={`bg-white p-4 rounded-lg shadow-sm border-l-4 flex justify-between items-center ${
-                    item.status === 'critico' ? 'border-red-500 bg-red-50' : 'border-yellow-400 bg-yellow-50'
+        {/* LOOP DOS PACIENTES (CARD MAIOR) */}
+        {pacientesEmRisco.map((paciente, idx) => (
+            <div key={idx} className={`bg-white rounded-xl shadow-sm border overflow-hidden ${
+                paciente.statusGeral === 'critico' ? 'border-red-200' : 'border-yellow-200'
+            }`}>
+                
+                {/* CABEÇALHO DO CARD (NOME DO PACIENTE) */}
+                <div className={`p-3 border-b flex justify-between items-center ${
+                    paciente.statusGeral === 'critico' ? 'bg-red-50' : 'bg-yellow-50'
                 }`}>
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-bold bg-white border px-1 rounded text-gray-500 uppercase">{item.pacienteNome}</span>
-                            {item.status === 'critico' && <span className="text-[10px] font-bold bg-red-200 text-red-800 px-1 rounded flex items-center gap-1"><AlertTriangle size={10}/> URGENTE</span>}
+                    <div className="flex items-center gap-2">
+                        <div className="bg-white p-1.5 rounded-full shadow-sm">
+                            <User size={16} className={paciente.statusGeral === 'critico' ? 'text-red-500' : 'text-yellow-600'}/>
                         </div>
-                        
-                        <h3 className="font-bold text-gray-800">
-                            {item.medNome} <span className="text-sm font-normal text-gray-600">{item.gramatura}</span>
+                        <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                            {paciente.nome}
+                            <span className="text-[10px] font-normal text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-100">
+                                Previsão: {paciente.diasCheck} dias
+                            </span>
                         </h3>
-                        
-                        <p className="text-xs text-gray-600 mt-1">
-                            Você tem <strong>{item.estoqueTotal}</strong>. Precisa de <strong>{item.consumoNecessario}</strong>.
-                        </p>
                     </div>
-
-                    <div className="text-right flex flex-col items-end">
-                         <span className={`px-2 py-1 rounded text-xs font-bold whitespace-nowrap ${
-                             item.faltaEm === 'ACABOU' ? 'bg-red-600 text-white' : 'bg-yellow-200 text-yellow-800'
-                         }`}>
-                             {item.faltaEm === 'ACABOU' ? 'COMPRAR HOJE' : 'COMPRAR JÁ'}
-                         </span>
-                         {/* Botão sem ação por enquanto, apenas visual */}
-                         <button className="mt-2 text-hospital-blue hover:text-blue-800 bg-white p-2 rounded-full shadow-sm">
-                            <ShoppingCart size={20} />
-                         </button>
-                    </div>
+                    {paciente.statusGeral === 'critico' && (
+                        <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-1 rounded-full flex items-center gap-1 border border-red-200">
+                            <AlertTriangle size={10}/> AÇÃO NECESSÁRIA
+                        </span>
+                    )}
                 </div>
-            ))}
-        </div>
+
+                {/* LISTA DE REMÉDIOS DESSE PACIENTE */}
+                <div className="divide-y divide-gray-100">
+                    {paciente.meds.map((med, i) => (
+                        <div key={i} className="p-4 hover:bg-gray-50 transition flex justify-between items-center">
+                            <div>
+                                <h4 className="font-bold text-gray-700">{med.nome} <span className="text-sm font-normal text-gray-400">{med.gramatura}</span></h4>
+                                <div className="text-xs mt-1 text-gray-500 flex flex-col sm:flex-row sm:gap-4">
+                                    <span>Tem: <strong className="text-gray-800">{med.estoqueTotal}</strong></span>
+                                    <span>Precisa: <strong className="text-gray-800">{med.consumoNecessario}</strong></span>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                    med.status === 'critico' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                    {med.faltaEm}
+                                </span>
+                                <button className="text-hospital-blue bg-blue-50 hover:bg-blue-100 p-2 rounded-full transition" title="Adicionar à lista de compras">
+                                    <ShoppingCart size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        ))}
       </main>
     </div>
   );

@@ -145,14 +145,14 @@ export default function Register() {
             disabled={loading}
             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-hospital-blue hover:bg-blue-700 focus:outline-none transition-colors"
           >
-            {loading ? 'Cadastrando...' : 'Criar Conta Grátis'}
+            {loading ? 'Cadastrando...' : 'Criar Conta'}
           </button>
         </form>
 
         <div className="mt-6 text-center border-t border-gray-200 pt-4">
             <p className="text-sm text-gray-600">
                 Já possui uma conta?{' '}
-                <Link to="/" className="font-medium text-hospital-blue hover:text-blue-500">
+                <Link to="/login" className="font-medium text-hospital-blue hover:text-blue-500">
                     Fazer Login
                 </Link>
             </p>

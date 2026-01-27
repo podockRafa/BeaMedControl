@@ -21,6 +21,10 @@ export default function PatientDetails() {
   const [showHistoryModal, setShowHistoryModal] = useState(false); 
   const [historyList, setHistoryList] = useState([]); 
   const [loadingHistory, setLoadingHistory] = useState(false);
+  
+  // 👇 CONFIGURAÇÃO DO CHECKLIST
+  const [showConfigModal, setShowConfigModal] = useState(false); 
+  const [diasChecklist, setDiasChecklist] = useState(4);         
 
   const [selectedMed, setSelectedMed] = useState(null); 
 
@@ -51,6 +55,8 @@ export default function PatientDetails() {
       const snapshot = await getDoc(docRef);
       if(snapshot.exists()){
         setPaciente(snapshot.data());
+        // Carrega a configuração do banco
+        setDiasChecklist(snapshot.data().diasVerificacao || 4);
       } else {
         alert("Paciente não encontrado");
         navigate('/dashboard');
@@ -132,7 +138,6 @@ export default function PatientDetails() {
   // --- FUNÇÕES DE MALEABILIDADE ---
   function handleOpenOptions(med) {
       setSelectedMed(med);
-      // Preenche os estados manuais com os dados atuais do remédio
       setManualCaixaAtiva(med.caixaAtivaRestante);
       setManualEstoque(med.estoqueCaixas);
       setShowOptionsModal(true);
@@ -176,7 +181,6 @@ export default function PatientDetails() {
       if(!selectedMed) return;
       try {
           await updateDoc(doc(db, "medicamentos", selectedMed.id), {
-              // Usa os estados manuais corretos
               caixaAtivaRestante: Number(manualCaixaAtiva),
               estoqueCaixas: Number(manualEstoque)
           });
@@ -184,6 +188,23 @@ export default function PatientDetails() {
           alert("Inventário corrigido!");
           setShowOptionsModal(false);
       } catch (err) { alert("Erro ao corrigir inventário"); }
+  }
+
+  // 👇👇 FUNÇÃO DE SALVAR CONFIGURAÇÃO DO CHECKLIST 👇👇
+  async function handleSaveConfig() {
+    try {
+        await updateDoc(doc(db, "pacientes", id), {
+            diasVerificacao: Number(diasChecklist)
+        });
+        
+        setPaciente(prev => ({...prev, diasVerificacao: Number(diasChecklist)}));
+        
+        setShowConfigModal(false);
+        alert("Preferência de checklist atualizada!");
+    } catch (error) {
+        console.log(error);
+        alert("Erro ao salvar configuração.");
+    }
   }
 
   // --- FUNÇÕES CRUD BÁSICAS ---
@@ -230,6 +251,11 @@ export default function PatientDetails() {
       return;
     }
 
+    const indexHoras = listaHorariosLimpa.map(h => {
+        const horaTexto = h.split(':')[0]; 
+        return parseInt(horaTexto);
+    });
+
     const dadosBase = {
         pacienteId: id,
         userId: user.uid, 
@@ -237,7 +263,12 @@ export default function PatientDetails() {
         capacidadeCaixa: Number(capacidadeCaixa),
         dose: Number(dose),
         gramatura: gramatura, 
-        horarios: listaHorariosLimpa,
+        
+        horarios: listaHorariosLimpa, 
+        horarios_horas: indexHoras,
+
+        status: "ativo",
+        
         obs: obsMed,
         frequenciaTipo: frequencia,
         frequenciaDias: diasSemana,
@@ -301,23 +332,18 @@ export default function PatientDetails() {
       switch(acao) {
           case 'ROBO_CONSUMO': 
             return <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] font-bold uppercase">🤖 Automático</span>;
-          
           case 'SOS': 
             return <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-[10px] font-bold uppercase">💊 SOS / Extra</span>;
-          
           case 'DEVOLUCAO': 
             return <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold uppercase">↩️ Devolução</span>;
-          
           case 'AJUSTE_MANUAL': 
             return <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-[10px] font-bold uppercase">⚙️ Ajuste Manual</span>;
-          
           case 'FALTA_ESTOQUE': 
             return (
                 <span className="bg-red-600 text-white px-2 py-1 rounded text-[10px] font-bold uppercase flex items-center gap-1 animate-pulse">
                     🚫 NÃO TOMOU (SEM ESTOQUE)
                 </span>
             );
-
           default: 
             return <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{acao}</span>;
       }
@@ -328,7 +354,7 @@ export default function PatientDetails() {
   return (
     <div className="min-h-screen bg-gray-100 pb-20">
       
-      {/* HEADER */}
+      {/* HEADER ATUALIZADO */}
       <header className="bg-white p-4 shadow-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -337,7 +363,22 @@ export default function PatientDetails() {
                 </button>
                 <div>
                     <h1 className="text-xl font-bold text-gray-800">{paciente.nome}</h1>
-                    <p className="text-xs text-gray-500">Prontuário Digital</p>
+                    
+                    {/* 👇👇👇 AQUI ESTÁ A MUDANÇA: TEXTO + ÍCONE JUNTOS */}
+                    <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-gray-500">Prontuário Digital</p>
+                        <span className="text-gray-300">|</span>
+                        <button 
+                            onClick={() => setShowConfigModal(true)}
+                            className="flex items-center gap-1 text-[10px] bg-blue-50 text-hospital-blue px-2 py-0.5 rounded border border-blue-100 hover:bg-blue-100 transition"
+                            title="Configurar dias do Checklist"
+                        >
+                            <span>Checklist: {diasChecklist} dias</span>
+                            <Settings size={12} />
+                        </button>
+                    </div>
+                    {/* 👆👆👆 FIM DA MUDANÇA */}
+
                 </div>
             </div>
 
@@ -416,252 +457,295 @@ export default function PatientDetails() {
 
      {/* MODAL DE HISTÓRICO */}
      {showHistoryModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
-            <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
-                
-                <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
-                    <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                        <History size={20} className="text-hospital-blue"/>
-                        Histórico de Movimentações
-                    </h3>
-                    <button onClick={() => setShowHistoryModal(false)} className="p-2 hover:bg-gray-200 rounded-full">
-                        <X size={20} className="text-gray-500"/>
-                    </button>
-                </div>
+         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
+           <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
+               
+               <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                   <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                       <History size={20} className="text-hospital-blue"/>
+                       Histórico de Movimentações
+                   </h3>
+                   <button onClick={() => setShowHistoryModal(false)} className="p-2 hover:bg-gray-200 rounded-full">
+                       <X size={20} className="text-gray-500"/>
+                   </button>
+               </div>
 
-                <div className="p-4 overflow-y-auto flex-1 space-y-4 bg-gray-50/50">
-                    {loadingHistory ? (
-                        <div className="text-center py-10 text-gray-400">Carregando histórico...</div>
-                    ) : historyList.length === 0 ? (
-                        <div className="text-center py-10 text-gray-400">Nenhuma movimentação registrada.</div>
-                    ) : (
-                        historyList.map(item => (
-                            <div key={item.id} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm flex flex-col gap-1">
-                                <div className="flex justify-between items-start">
-                                    <div className="flex items-center gap-2">
-                                        {renderBadgeAcao(item.acao)}
-                                        <span className="text-xs text-gray-400 font-mono">{formatarData(item.data)}</span>
-                                    </div>
-                                </div>
-                                <p className="font-bold text-gray-800">{item.medicamentoNome}</p>
-                                
-                                <p className="text-sm text-gray-600 mt-1 whitespace-pre-line leading-relaxed">
-                                    {item.detalhe}
-                                </p>
+               <div className="p-4 overflow-y-auto flex-1 space-y-4 bg-gray-50/50">
+                   {loadingHistory ? (
+                       <div className="text-center py-10 text-gray-400">Carregando histórico...</div>
+                   ) : historyList.length === 0 ? (
+                       <div className="text-center py-10 text-gray-400">Nenhuma movimentação registrada.</div>
+                   ) : (
+                       historyList.map(item => (
+                           <div key={item.id} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm flex flex-col gap-1">
+                               <div className="flex justify-between items-start">
+                                   <div className="flex items-center gap-2">
+                                       {renderBadgeAcao(item.acao)}
+                                       <span className="text-xs text-gray-400 font-mono">{formatarData(item.data)}</span>
+                                   </div>
+                               </div>
+                               <p className="font-bold text-gray-800">{item.medicamentoNome}</p>
+                               
+                               <p className="text-sm text-gray-600 mt-1 whitespace-pre-line leading-relaxed">
+                                   {item.detalhe}
+                               </p>
 
-                                <div className="mt-2 pt-2 border-t border-gray-50 flex items-center gap-1 text-[10px] text-gray-400">
-                                    <User size={10} />
-                                    {item.usuario}
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-          </div>
-      )}
+                               <div className="mt-2 pt-2 border-t border-gray-50 flex items-center gap-1 text-[10px] text-gray-400">
+                                   <User size={10} />
+                                   {item.usuario}
+                               </div>
+                           </div>
+                       ))
+                   )}
+               </div>
+           </div>
+         </div>
+     )}
 
-      {/* MODAL OPÇÕES (COM OS NOMES CERTOS AGORA!) */}
-      {showOptionsModal && selectedMed && (
-          <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
-            <div className="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-slide-up">
-                <div className="flex justify-between items-center mb-6 border-b pb-4">
-                    <div>
-                        <h3 className="text-lg font-bold text-gray-800">{selectedMed.nome}</h3>
-                        <p className="text-xs text-gray-500">Painel de Ajuste Rápido</p>
-                    </div>
-                    <button onClick={() => setShowOptionsModal(false)} className="text-gray-400 hover:text-gray-600">Fechar</button>
-                </div>
+     {/* MODAL OPÇÕES */}
+     {showOptionsModal && selectedMed && (
+         <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
+           <div className="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-slide-up">
+               <div className="flex justify-between items-center mb-6 border-b pb-4">
+                   <div>
+                       <h3 className="text-lg font-bold text-gray-800">{selectedMed.nome}</h3>
+                       <p className="text-xs text-gray-500">Painel de Ajuste Rápido</p>
+                   </div>
+                   <button onClick={() => setShowOptionsModal(false)} className="text-gray-400 hover:text-gray-600">Fechar</button>
+               </div>
 
-                <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                        <button onClick={handleAdministrarSOS} className="flex flex-col items-center gap-2 bg-red-50 text-red-600 p-4 rounded-lg hover:bg-red-100 border border-red-100 transition">
-                            <Syringe size={24} />
-                            <span className="font-bold text-sm">Aplicar SOS</span>
-                            <span className="text-[10px] opacity-70">(-1 dose agora)</span>
-                        </button>
-                        <button onClick={handleDevolverDose} className="flex flex-col items-center gap-2 bg-green-50 text-green-700 p-4 rounded-lg hover:bg-green-100 border border-green-100 transition">
-                            <RotateCcw size={24} />
-                            <span className="font-bold text-sm">Devolver</span>
-                            <span className="text-[10px] opacity-70">(Paciente não tomou)</span>
-                        </button>
-                    </div>
+               <div className="space-y-4">
+                   <div className="grid grid-cols-2 gap-3">
+                       <button onClick={handleAdministrarSOS} className="flex flex-col items-center gap-2 bg-red-50 text-red-600 p-4 rounded-lg hover:bg-red-100 border border-red-100 transition">
+                           <Syringe size={24} />
+                           <span className="font-bold text-sm">Aplicar SOS</span>
+                           <span className="text-[10px] opacity-70">(-1 dose agora)</span>
+                       </button>
+                       <button onClick={handleDevolverDose} className="flex flex-col items-center gap-2 bg-green-50 text-green-700 p-4 rounded-lg hover:bg-green-100 border border-green-100 transition">
+                           <RotateCcw size={24} />
+                           <span className="font-bold text-sm">Devolver</span>
+                           <span className="text-[10px] opacity-70">(Paciente não tomou)</span>
+                       </button>
+                   </div>
 
-                    {/* --- BLOCO DE CORREÇÃO DE INVENTÁRIO (CORRIGIDO) --- */}
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <div className="flex items-center gap-2 mb-3 text-orange-600 font-bold">
-                            <AlertTriangle size={18} />
-                            <h3>Correção de Inventário</h3>
-                        </div>
+                   <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                       <div className="flex items-center gap-2 mb-3 text-orange-600 font-bold">
+                           <AlertTriangle size={18} />
+                           <h3>Correção de Inventário</h3>
+                       </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            
-                            {/* CAMPO 1: NA CARTELA (manualCaixaAtiva) */}
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Na Cartela</label>
-                                <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
-                                    <button 
-                                        onClick={() => setManualCaixaAtiva(prev => Math.max(0, Number(prev) - 1))}
-                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-600 transition border-r border-gray-200"
-                                    >
-                                        <Minus size={16} />
-                                    </button>
-                                    
-                                    <input
-                                        type="number"
-                                        className="w-full text-center font-bold text-gray-800 focus:outline-none p-2 appearance-none"
-                                        value={manualCaixaAtiva}
-                                        onChange={(e) => setManualCaixaAtiva(Number(e.target.value))}
-                                    />
+                       <div className="grid grid-cols-2 gap-4">
+                           <div>
+                               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Na Cartela</label>
+                               <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
+                                   <button 
+                                       onClick={() => setManualCaixaAtiva(prev => Math.max(0, Number(prev) - 1))}
+                                       className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-600 transition border-r border-gray-200"
+                                   >
+                                       <Minus size={16} />
+                                   </button>
+                                   
+                                   <input
+                                       type="number"
+                                       className="w-full text-center font-bold text-gray-800 focus:outline-none p-2 appearance-none"
+                                       value={manualCaixaAtiva}
+                                       onChange={(e) => setManualCaixaAtiva(Number(e.target.value))}
+                                   />
 
-                                    <button 
-                                        onClick={() => setManualCaixaAtiva(prev => Number(prev) + 1)}
-                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-green-600 transition border-l border-gray-200"
-                                    >
-                                        <Plus size={16} />
-                                    </button>
-                                </div>
-                            </div>
+                                   <button 
+                                       onClick={() => setManualCaixaAtiva(prev => Number(prev) + 1)}
+                                       className="p-3 bg-gray-100 hover:bg-gray-200 text-green-600 transition border-l border-gray-200"
+                                   >
+                                       <Plus size={16} />
+                                   </button>
+                               </div>
+                           </div>
 
-                            {/* CAMPO 2: ESTOQUE (manualEstoque) */}
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Estoque (Cx)</label>
-                                <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
-                                    <button 
-                                        onClick={() => setManualEstoque(prev => Math.max(0, Number(prev) - 1))}
-                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-600 transition border-r border-gray-200"
-                                    >
-                                        <Minus size={16} />
-                                    </button>
+                           <div>
+                               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Estoque (Cx)</label>
+                               <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
+                                   <button 
+                                       onClick={() => setManualEstoque(prev => Math.max(0, Number(prev) - 1))}
+                                       className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-600 transition border-r border-gray-200"
+                                   >
+                                       <Minus size={16} />
+                                   </button>
 
-                                    <input
-                                        type="number"
-                                        className="w-full text-center font-bold text-gray-800 focus:outline-none p-2 appearance-none"
-                                        value={manualEstoque}
-                                        onChange={(e) => setManualEstoque(Number(e.target.value))}
-                                    />
+                                   <input
+                                       type="number"
+                                       className="w-full text-center font-bold text-gray-800 focus:outline-none p-2 appearance-none"
+                                       value={manualEstoque}
+                                       onChange={(e) => setManualEstoque(Number(e.target.value))}
+                                   />
 
-                                    <button 
-                                        onClick={() => setManualEstoque(prev => Number(prev) + 1)}
-                                        className="p-3 bg-gray-100 hover:bg-gray-200 text-blue-600 transition border-l border-gray-200"
-                                    >
-                                        <Plus size={16} />
-                                    </button>
-                                </div>
-                            </div>
+                                   <button 
+                                       onClick={() => setManualEstoque(prev => Number(prev) + 1)}
+                                       className="p-3 bg-gray-100 hover:bg-gray-200 text-blue-600 transition border-l border-gray-200"
+                                   >
+                                       <Plus size={16} />
+                                   </button>
+                               </div>
+                           </div>
+                       </div>
 
-                        </div>
+                       <button
+                           onClick={handleSalvarAjusteManual}
+                           className="mt-4 w-full bg-slate-800 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-slate-900 transition"
+                       >
+                           <Save size={18} />
+                           Salvar Correção
+                       </button>
+                   </div>
+               </div>
+           </div>
+         </div>
+     )}
 
-                        <button
-                            onClick={handleSalvarAjusteManual}
-                            className="mt-4 w-full bg-slate-800 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-slate-900 transition"
-                        >
-                            <Save size={18} />
-                            Salvar Correção
-                        </button>
-                    </div>
-                </div>
-            </div>
-          </div>
-      )}
+     {/* MODAL FORMULÁRIO DE REMÉDIO (ADD/EDIT) */}
+     {showModal && (
+       <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4 animate-fade-in">
+         <div className="bg-white w-full max-w-lg rounded-xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
+           <div className="flex justify-between items-center mb-4">
+             <h3 className="text-lg font-bold text-gray-800">{editingId ? 'Editar Medicamento' : 'Novo Medicamento'}</h3>
+             <button onClick={() => setShowModal(false)} className="text-gray-400">Fechar</button>
+           </div>
+           <form onSubmit={handleSaveMed} className="space-y-4">
+               <div className="grid grid-cols-3 gap-4">
+                   <div className="col-span-2">
+                       <label className="label-form">Nome do Medicamento</label>
+                       <input required type="text" className="input-form" value={nomeMed} onChange={e => setNomeMed(e.target.value)} placeholder="Ex: Losartana"/>
+                   </div>
+                   <div>
+                       <label className="label-form">Gramatura</label>
+                       <input type="text" className="input-form" value={gramatura} onChange={e => setGramatura(e.target.value)} placeholder="Ex: 50mg"/>
+                   </div>
+               </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div>
+                 <label className="label-form">Qtd na Caixa</label>
+                 <input required type="number" className="input-form" value={capacidadeCaixa} onChange={e => setCapacidadeCaixa(e.target.value)}/>
+               </div>
+               <div>
+                 <label className="label-form">Caixas Compradas</label>
+                 <input required type="number" className="input-form" value={estoqueCaixas} onChange={e => setEstoqueCaixas(e.target.value)}/>
+               </div>
+             </div>
+             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
+               <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><Clock size={16}/> Como tomar?</p>
+               <div>
+                 <label className="label-form">Frequência</label>
+                 <select value={frequencia} onChange={e => setFrequencia(e.target.value)} className="input-form bg-white">
+                   <option value="diario">Todo dia</option>
+                   <option value="intervalo">Intervalo de dias</option>
+                   <option value="dias_semana">Dias específicos</option>
+                 </select>
+               </div>
+               {frequencia === 'intervalo' && (
+                 <div className="animate-fade-in">
+                   <label className="label-form">A cada quantos dias?</label>
+                   <div className="flex gap-2">
+                       <input type="number" min="2" className="input-form" value={intervalo} onChange={e => setIntervalo(e.target.value)}/>
+                       <div className="flex items-center text-sm text-gray-500 whitespace-nowrap">{intervalo == 2 ? '(Dia Sim, Dia Não)' : 'dias'}</div>
+                   </div>
+                 </div>
+               )}
+               {frequencia === 'dias_semana' && (
+                   <div className="animate-fade-in">
+                     <label className="label-form mb-2">Selecione os dias:</label>
+                     <div className="flex justify-between gap-1">
+                       {['D','S','T','Q','Q','S','S'].map((dia, index) => (
+                         <button key={index} type="button" onClick={() => toggleDia(index)} className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${diasSemana.includes(index) ? 'bg-hospital-blue text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>{dia}</button>
+                       ))}
+                     </div>
+                   </div>
+               )}
+               <div>
+                   <label className="label-form">Início do Tratamento</label>
+                   <input type="date" className="input-form" required value={dataInicio} onChange={e => setDataInicio(e.target.value)}/>
+               </div>
+               
+               <div className="grid grid-cols-2 gap-4">
+                   <div>
+                       <label className="label-form">Dose (comps)</label>
+                       <input required type="number" className="input-form" value={dose} onChange={e => setDose(e.target.value)}/>
+                   </div>
+                   <div>
+                       <label className="label-form flex justify-between items-center">
+                           Horários
+                           <button type="button" onClick={addHorario} className="text-hospital-blue hover:bg-blue-50 rounded-full p-1"><Plus size={14}/></button>
+                       </label>
+                       <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                           {horarios.map((h, i) => (
+                               <div key={i} className="flex gap-1 items-center">
+                                   <input 
+                                       type="time" 
+                                       className="input-form text-center p-1 h-9" 
+                                       value={h} 
+                                       onChange={e => updateHorario(i, e.target.value)}
+                                       required
+                                   />
+                                   {horarios.length > 1 && (
+                                       <button type="button" onClick={() => removeHorario(i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                                   )}
+                               </div>
+                           ))}
+                       </div>
+                   </div>
+               </div>
+             </div>
+             <button type="submit" className="btn-primary w-full">{editingId ? 'Salvar Alterações' : 'Cadastrar Medicamento'}</button>
+           </form>
+         </div>
+       </div>
+     )}
 
-      {/* MODAL FORMULÁRIO (ADD/EDIT) */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white w-full max-w-lg rounded-xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-800">{editingId ? 'Editar Medicamento' : 'Novo Medicamento'}</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400">Fechar</button>
-            </div>
-            <form onSubmit={handleSaveMed} className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-2">
-                        <label className="label-form">Nome do Medicamento</label>
-                        <input required type="text" className="input-form" value={nomeMed} onChange={e => setNomeMed(e.target.value)} placeholder="Ex: Losartana"/>
-                    </div>
-                    <div>
-                        <label className="label-form">Gramatura</label>
-                        <input type="text" className="input-form" value={gramatura} onChange={e => setGramatura(e.target.value)} placeholder="Ex: 50mg"/>
-                    </div>
-                </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label-form">Qtd na Caixa</label>
-                  <input required type="number" className="input-form" value={capacidadeCaixa} onChange={e => setCapacidadeCaixa(e.target.value)}/>
-                </div>
-                <div>
-                  <label className="label-form">Caixas Compradas</label>
-                  <input required type="number" className="input-form" value={estoqueCaixas} onChange={e => setEstoqueCaixas(e.target.value)}/>
-                </div>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
-                <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><Clock size={16}/> Como tomar?</p>
-                <div>
-                  <label className="label-form">Frequência</label>
-                  <select value={frequencia} onChange={e => setFrequencia(e.target.value)} className="input-form bg-white">
-                    <option value="diario">Todo dia</option>
-                    <option value="intervalo">Intervalo de dias</option>
-                    <option value="dias_semana">Dias específicos</option>
-                  </select>
-                </div>
-                {frequencia === 'intervalo' && (
-                  <div className="animate-fade-in">
-                    <label className="label-form">A cada quantos dias?</label>
-                    <div className="flex gap-2">
-                        <input type="number" min="2" className="input-form" value={intervalo} onChange={e => setIntervalo(e.target.value)}/>
-                        <div className="flex items-center text-sm text-gray-500 whitespace-nowrap">{intervalo == 2 ? '(Dia Sim, Dia Não)' : 'dias'}</div>
-                    </div>
-                  </div>
-                )}
-                {frequencia === 'dias_semana' && (
-                    <div className="animate-fade-in">
-                      <label className="label-form mb-2">Selecione os dias:</label>
-                      <div className="flex justify-between gap-1">
-                        {['D','S','T','Q','Q','S','S'].map((dia, index) => (
-                          <button key={index} type="button" onClick={() => toggleDia(index)} className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${diasSemana.includes(index) ? 'bg-hospital-blue text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>{dia}</button>
-                        ))}
-                      </div>
-                    </div>
-                )}
-                <div>
-                    <label className="label-form">Início do Tratamento</label>
-                    <input type="date" className="input-form" required value={dataInicio} onChange={e => setDataInicio(e.target.value)}/>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="label-form">Dose (comps)</label>
-                        <input required type="number" className="input-form" value={dose} onChange={e => setDose(e.target.value)}/>
-                    </div>
-                    <div>
-                        <label className="label-form flex justify-between items-center">
-                            Horários
-                            <button type="button" onClick={addHorario} className="text-hospital-blue hover:bg-blue-50 rounded-full p-1"><Plus size={14}/></button>
-                        </label>
-                        <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                            {horarios.map((h, i) => (
-                                <div key={i} className="flex gap-1 items-center">
-                                    <input 
-                                        type="time" 
-                                        className="input-form text-center p-1 h-9" 
-                                        value={h} 
-                                        onChange={e => updateHorario(i, e.target.value)}
-                                        required
-                                    />
-                                    {horarios.length > 1 && (
-                                        <button type="button" onClick={() => removeHorario(i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-              </div>
-              <button type="submit" className="btn-primary w-full">{editingId ? 'Salvar Alterações' : 'Cadastrar Medicamento'}</button>
-            </form>
-          </div>
-        </div>
-      )}
+     {/* MODAL CONFIGURAÇÃO DO PACIENTE (CHECKLIST) */}
+     {showConfigModal && (
+         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-sm">
+             <div className="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-slide-up">
+                 <div className="flex justify-between items-center mb-4 border-b pb-2">
+                     <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                         <Settings size={20} className="text-gray-500"/>
+                         Configurações
+                     </h3>
+                     <button onClick={() => setShowConfigModal(false)}><X size={20} className="text-gray-400"/></button>
+                 </div>
+
+                 <div className="space-y-4">
+                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                         <label className="block text-sm font-bold text-gray-700 mb-2">
+                             Previsão de Estoque (Checklist)
+                         </label>
+                         <div className="flex items-center gap-2">
+                             <input
+                                 type="number"
+                                 min="1"
+                                 max="30"
+                                 className="w-full p-3 border border-gray-300 rounded-lg text-center font-bold text-lg focus:outline-none focus:border-hospital-blue"
+                                 value={diasChecklist}
+                                 onChange={(e) => setDiasChecklist(e.target.value)}
+                             />
+                             <span className="text-sm text-gray-500 font-medium">
+                                 dias de<br/>antecedência
+                             </span>
+                         </div>
+                         <p className="text-[11px] text-gray-500 mt-2 leading-tight">
+                             Define com quantos dias de antecedência o sistema avisa que o remédio vai acabar para <strong>{paciente?.nome}</strong>.
+                         </p>
+                     </div>
+
+                     <button 
+                         onClick={handleSaveConfig}
+                         className="w-full bg-hospital-blue text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2"
+                     >
+                         <Save size={18} />
+                         Salvar Preferência
+                     </button>
+                 </div>
+             </div>
+         </div>
+     )}
+
     </div>
   );
 }

@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [pacientes, setPacientes] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
+  const [diasVerificacao, setDiasVerificacao] = useState(4);
   
   // Estados do formulário
   const [editingId, setEditingId] = useState(null);
@@ -66,6 +67,7 @@ export default function Dashboard() {
     setStatus('ok');
     setObs('');
     setQuarto('');
+    setDiasVerificacao(4);
     setShowModal(true);
   }
 
@@ -76,6 +78,7 @@ export default function Dashboard() {
     setStatus(paciente.status);
     setObs(paciente.obs || '');
     setQuarto(paciente.quarto || '');
+    setDiasVerificacao(paciente.diasVerificacao || 4);
     setShowModal(true);
   }
 
@@ -108,7 +111,8 @@ export default function Dashboard() {
             nome: nome,
             status: status,
             obs: obs,
-            quarto: quarto
+            quarto: quarto,
+            diasVerificacao: Number(diasVerificacao)
         });
       } else {
         await addDoc(collection(db, "pacientes"), {
@@ -116,6 +120,7 @@ export default function Dashboard() {
             status: status,
             obs: obs,
             quarto: quarto,
+            diasVerificacao: Number(diasVerificacao),
             userId: user.uid, 
             criadoEm: new Date()
         });
@@ -277,6 +282,26 @@ export default function Dashboard() {
                       value={quarto}
                       onChange={(e) => setQuarto(e.target.value)}
                     />
+                  </div>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                  <div className="flex justify-between items-center">
+                      <label className="text-sm font-bold text-gray-700">Previsão Estoque (Checklist)</label>
+                      <span className="text-xs text-blue-600 font-medium bg-white px-2 py-0.5 rounded-full border border-blue-200">
+                          Padrão: 4 dias
+                      </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-2">
+                      <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          className="w-20 p-2 text-center text-lg font-bold border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-hospital-blue"
+                          value={diasVerificacao}
+                          onChange={(e) => setDiasVerificacao(e.target.value)}
+                      />
+                      <span className="text-sm text-gray-600">dias de antecedência para avisar falta de remédio.</span>
                   </div>
               </div>
 
